@@ -1,0 +1,28 @@
+[project]
+name = "verificacao-pagamento-pers"
+version = "0.1.0"
+description = "Verificação de pagamento de PER/DCOMP via Declaração de Compensação no e-CAC (desktop)"
+requires-python = ">=3.11"
+# Dependências de runtime: requirements.txt.
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "ruff>=0.6,<1.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 110
+# Copiados das Protocolações sem alteração de lógica: não são fiscalizados aqui.
+extend-exclude = ["progresso.py", "ui_resumo_final.py", "log_manager.py", "debug_telas", "logs"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "S", "BLE", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003"]  # travessão e acentos em texto/comentário são intencionais
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "S105", "S106", "S108"]
+"tests/test_*_navegador.py" = ["S101", "E501"]  # HTML/JS da réplica da tela
+"run.py" = ["S603", "S606"]  # pip/execv com sys.executable, como nas Protocolações

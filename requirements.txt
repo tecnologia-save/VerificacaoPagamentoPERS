@@ -1,0 +1,9 @@
+# Dependências de runtime (caminho desktop).
+openpyxl>=3.1        # leitura da planilha
+cryptography>=42     # confere a senha do .pfx antes de abrir o navegador
+Pillow>=10.0         # logo do formulário
+
+# Login no e-CAC + captcha (traz patchright e ResolvedorCaptcha). Nesta máquina
+# o ecac_login está instalado em modo editável a partir de ..\LoginEcac — é a
+# versão de lá que vale (precisa de cert_pfx_path e garantir_acesso_ecac).
+ecac-login @ git+https://github.com/tecnologia-save/LoginEcac-Python.git

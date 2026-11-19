@@ -1,0 +1,27 @@
+.env
+chrome_debug_profile*/
+logs/
+debug_telas/
+__pycache__/
+*.pyc
+.venv/
+*.pfx
+senhas.json
+.pytest_cache/
+.ruff_cache/
+_debug_*.png
+
+# Planilhas de clientes nunca entram no repositório
+*.xlsx
+*.xlsm
+
+# Build (PyInstaller)
+build/
+dist/
+*.exe
+resultados/
+backups/
+navegador_aberto.json
+
+*.trava
+.claude/
