@@ -102,6 +102,8 @@ SELETOR_NAO_PENDENCIAS_NAO_IMPEDITIVAS = "#botaoNaoVerificarPendenciasNaoImpedit
 SELETOR_OK_TELA_INICIAL = "#botaoNavegarTelaInicial"
 
 TEXTO_APTO = "O Documento está apto para envio"
+# "O Documento não está apto para envio (1)" + a lista das pendências (tela real, ARABICA).
+TEXTO_NAO_APTO = "não está apto para envio"
 # Trechos das mensagens do desfecho. O "pagamento realizado" vem DENTRO do
 # "A TRANSMISSÃO NÃO FOI CONCLUÍDA", por isso é conferido primeiro.
 TEXTO_PAGAMENTO_REALIZADO = "TEVE O PAGAMENTO REALIZADO"
@@ -357,6 +359,8 @@ def documento_apto(page, diagnostico=None) -> bool:
         if _texto_visivel(page, TEXTO_APTO):
             print("  -> Documento apto para envio: True")
             return True
+        if _texto_visivel(page, TEXTO_NAO_APTO):
+            break
         time.sleep(0.3)
     aguardar_pagina_pronta(page)
     if _texto_visivel(page, TEXTO_APTO):
@@ -371,7 +375,17 @@ def documento_apto(page, diagnostico=None) -> bool:
             f"Depois de 'Prosseguir' (responsavel) a tela foi para '{etapa or '?'}', e nao para "
             "'Verificar Pendencias'" + (f": {mensagens}" if mensagens else ".")
         )
-    print("  -> Documento apto para envio: False (etapa 'Verificar Pendencias', sem a mensagem)")
+    if not _texto_visivel(page, TEXTO_NAO_APTO):
+        # Verificação de Pendências VAZIA, ou com "Não é possível prosseguir"
+        # (linhas 4824/4825, 19/11/2026: gravadas como "não apto" no meio de uma
+        # queda do e-CAC). Sem a mensagem de não apto, é erro: a linha é refeita.
+        mensagens = mensagens_da_tela(page)
+        if diagnostico is not None:
+            diagnostico("pendencias_sem_resultado")
+        raise ProsseguirNaoAvancou(
+            "Verificar Pendencias sem 'apto' nem 'nao apto' na tela"
+            + (f": {mensagens}" if mensagens else "."))
+    print("  -> Documento apto para envio: False (a tela diz que nao esta apto)")
     if diagnostico is not None:
         diagnostico("nao_apto")
     return False

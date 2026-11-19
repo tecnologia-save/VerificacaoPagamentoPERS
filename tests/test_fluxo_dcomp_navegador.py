@@ -189,7 +189,9 @@ $('[name=btnProsseguir]').addEventListener('click', () => {
     esconder('tela-responsavel');
     if (__VOLTA_CREDITO__) { mostrar('tela-credito'); etapa('Informar Crédito'); m.etapa = 'credito'; return; }
     mostrar('tela-pendencias'); m.etapa = 'pendencias'; etapa('Verificar Pendências');
-    if (__APTO__) setTimeout(() => mostrar('apto'), 300); else msg('Existem pendências impeditivas.');
+    if (__VAZIA__) { msg('Não é possível prosseguir neste momento. Tente novamente mais tarde.'); }
+    else if (__APTO__) setTimeout(() => mostrar('apto'), 300);
+    else { $('#tela-pendencias').insertAdjacentHTML('beforeend', '<div class="erro">O Documento não está apto para envio (1)</div>'); }
   } else if (m.etapa === 'pendencias') {
     esconder('tela-pendencias'); mostrar('tela-envio'); m.etapa = 'envio';
   }
@@ -201,7 +203,7 @@ MSG_OUTRO = ("A TRANSMISSÃO NÃO FOI CONCLUÍDA. O PER/DCOMP NÃO FOI TRANSMITI
              "O CRÉDITO INFORMADO ESTÁ VINCULADO A PROCESSO EM ANÁLISE.")
 
 
-def _app(*, desfecho="pago", apto=True, com_termo=True, pendencias=False, volta_credito=False,
+def _app(*, desfecho="pago", apto=True, pendencias_vazias=False, com_termo=True, pendencias=False, volta_credito=False,
          apaga_vencimento=False, tipo_correto="", cancelado=False) -> str:
     substituicoes = {
         "__RADIOS__": _radios(OPCOES_REAIS),
@@ -220,6 +222,7 @@ def _app(*, desfecho="pago", apto=True, com_termo=True, pendencias=False, volta_
         "__NUMERO__": NUMERO_ENVIADO,
         "__DESFECHO__": desfecho,
         "__APTO__": "true" if apto else "false",
+        "__VAZIA__": "true" if pendencias_vazias else "false",
         "__COM_TERMO__": "true" if com_termo else "false",
         "__PENDENCIAS__": "true" if pendencias else "false",
         "__VOLTA_CREDITO__": "true" if volta_credito else "false",
@@ -301,6 +304,20 @@ def test_nao_apto_nao_envia(abrir, monkeypatch):
     assert desfecho.situacao == SITUACAO_NAO_APTO
     assert _estado(page)["envios"] == "0"
     assert "nao_apto" in retratos
+
+
+def test_pendencias_vazias_com_nao_e_possivel_prosseguir_e_erro_e_nao_nao_apto(abrir, monkeypatch):
+    """Linhas 4824/4825 (19/11/2026): a Verificação de Pendências veio vazia,
+    com "Não é possível prosseguir", e foi gravada como "não apto"."""
+    from VerificacaoPagamento.formulario_perdcomp import ProsseguirNaoAvancou
+
+    monkeypatch.setattr(et, "ESPERA_APTO_MS", 1_500)
+    page = abrir(pendencias_vazias=True)
+    retratos = []
+    with pytest.raises(ProsseguirNaoAvancou, match="nem 'nao apto'"):
+        _declaracao(page, permitir_envio=True, diagnostico=retratos.append)
+    assert _estado(page)["envios"] == "0"
+    assert "nao_apto" not in retratos
 
 
 def test_modo_seguro_para_no_apto_sem_clicar_enviar(abrir):
