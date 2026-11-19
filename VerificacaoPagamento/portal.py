@@ -18,6 +18,7 @@ from .desfechos import (
     EnvioRecusadoPeloServidor,
     EnvioSemConfirmacao,
     PerdcompCancelado,
+    SemPermissaoPerdcomp,
     TipoCreditoDivergente,
 )
 from .diagnostico import capturar_tela
@@ -126,7 +127,8 @@ class PortalReal:
                 "aviso de mensagens importantes não lidas na tela (a automação não abre mensagens)")
         try:
             return self._processar_linha(sessao, linha, antes_de_enviar=antes_de_enviar)
-        except (EnvioSemConfirmacao, EnvioRecusadoPeloServidor, EmpresaBloqueadaNaCaixaPostal):
+        except (EnvioSemConfirmacao, EnvioRecusadoPeloServidor, EmpresaBloqueadaNaCaixaPostal,
+                SemPermissaoPerdcomp):
             raise
         except Exception as e:
             if navegador_fechou(e):

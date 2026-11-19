@@ -65,6 +65,12 @@ class PerdcompCancelado(Exception):
     refaz nem com o outro tributo."""
 
 
+class SemPermissaoPerdcomp(Exception):
+    """Ao abrir o PER/DCOMP: "Seu perfil não possui permissão ou a execução
+    exige acesso com certificado digital" — a procuração não alcança o módulo.
+    Vale para a EMPRESA inteira."""
+
+
 class EmpresaBloqueadaNaCaixaPostal(Exception):
     """O e-CAC manda para a Caixa Postal em vez de abrir o PER/DCOMP: a empresa
     tem mensagem IMPORTANTE não lida (AGROFEG, 18/11/2026, "Parcelamento em

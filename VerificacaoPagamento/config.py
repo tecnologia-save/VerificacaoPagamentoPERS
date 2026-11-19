@@ -114,6 +114,10 @@ SITUACAO_TIPO_CREDITO_DIVERGENTE = ("Tipo do crédito informado neste documento 
 # crédito encontra-se cancelado" (regra do usuário, 19/11/2026): grava isto na
 # AA e segue para a próxima linha.
 SITUACAO_PERDCOMP_CANCELADO = "Perdcomp cancelado"
+# Ao abrir o módulo: "Seu perfil não possui permissão ou a execução exige acesso
+# com certificado digital" = a procuração não dá poder para o PER/DCOMP (regra
+# do usuário, 19/11/2026): grava isto na AA das linhas da empresa e segue.
+SITUACAO_SEM_PERMISSAO = "Procuração sem poder para PER/DCOMP"
 # "Enviar" clicado sem desfecho confirmado: NÃO se sabe se a Declaração foi
 # transmitida. A linha fica fora de todas as execuções até alguém conferir no
 # e-CAC — reenviar poderia gerar uma segunda Declaração de Compensação.

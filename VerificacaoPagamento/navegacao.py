@@ -8,7 +8,7 @@ devolve 500 nos chunks JS do Angular e o app não termina de subir.
 import time
 
 from .config import FRAME_PERDCOMP, PERDCOMP_URL, SELETOR_NAV_NOVO_DOCUMENTO
-from .desfechos import EmpresaBloqueadaNaCaixaPostal
+from .desfechos import EmpresaBloqueadaNaCaixaPostal, SemPermissaoPerdcomp
 from .formulario_perdcomp import navegador_fechou
 
 
@@ -31,6 +31,30 @@ def _conferir_bloqueio(page) -> None:
             "a automação não abre mensagens)")
 
 
+TEXTO_SEM_PERMISSAO = "não possui permissão ou a execução exige acesso com certificado digital"
+
+
+def sem_permissao(page) -> bool:
+    """O e-CAC mostrou "Seu perfil não possui permissão ou a execução exige
+    acesso com certificado digital" (na página ou em algum quadro)."""
+    for quadro in page.frames:
+        try:
+            texto = quadro.locator("body").first.inner_text(timeout=2_000)
+        except Exception as e:
+            if navegador_fechou(e):
+                raise
+            continue
+        if TEXTO_SEM_PERMISSAO in " ".join(texto.split()).casefold():
+            return True
+    return False
+
+
+def _conferir_permissao(page) -> None:
+    if sem_permissao(page):
+        raise SemPermissaoPerdcomp("o perfil não possui permissão para o PER/DCOMP (procuração "
+                                   "sem esse poder)")
+
+
 class PerdcompWebIndisponivel(Exception):
     """O PERDCOMP-WEB não terminou de carregar após várias tentativas."""
 
@@ -39,6 +63,8 @@ def navegar_modulo_perdcomp(page, timeout: int = 30_000, timeout_app: int = 120_
                             tentativas: int = 3) -> None:
     page.goto(PERDCOMP_URL, wait_until="domcontentloaded", timeout=timeout)
     _conferir_bloqueio(page)
+    page.wait_for_timeout(1_500)
+    _conferir_permissao(page)
 
     for tentativa in range(1, tentativas + 1):
         try:
@@ -50,6 +76,7 @@ def navegar_modulo_perdcomp(page, timeout: int = 30_000, timeout_app: int = 120_
             if navegador_fechou(e):
                 raise
             _conferir_bloqueio(page)
+            _conferir_permissao(page)
             if tentativa == tentativas:
                 raise PerdcompWebIndisponivel(
                     f"PERDCOMP-WEB não carregou após {tentativas} tentativas — provável "

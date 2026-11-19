@@ -241,6 +241,29 @@ def test_mensagens_que_continuam_travando_sao_tentadas_uma_vez_so():
     assert portal.tipos("linha") == []
 
 
+def test_procuracao_sem_poder_para_o_perdcomp_marca_a_empresa_e_segue():
+    from VerificacaoPagamento.config import SITUACAO_SEM_PERMISSAO
+    from VerificacaoPagamento.desfechos import SemPermissaoPerdcomp
+
+    lote = _lote([(_linha(2, CNPJ_A), "Save"), (_linha(3, CNPJ_A), "Save"),
+                  (_linha(4, CNPJ_B), "Save")])
+
+    class Portal(PortalFalso):
+        def abrir_modulo(self, sessao):
+            super().abrir_modulo(sessao)
+            if sessao.perfil_real == CNPJ_A:
+                raise SemPermissaoPerdcomp("perfil sem permissão")
+
+    portal = Portal()
+    registro = RegistroFalso()
+    resultados = _resultado(executar(lote, portal, registro=registro))
+    assert (SITUACAO_SEM_PERMISSAO, 2) in registro.anotacoes
+    assert (SITUACAO_SEM_PERMISSAO, 3) in registro.anotacoes
+    assert all(resultados[n][0] for n in (2, 3, 4))
+    assert portal.tipos("linha") == [(4, CNPJ_B)]
+    assert portal.tipos("modulo").count((CNPJ_A,)) == 1        # sem retentativas
+
+
 def test_troca_que_nao_trocou_faz_login_novo_e_nunca_preenche_no_cnpj_errado():
     """O popup apareceu DEPOIS da conferência na entrada (não detectado): a
     troca do ecac_login 'dá certo' sem trocar. A conferência do perfil pega."""

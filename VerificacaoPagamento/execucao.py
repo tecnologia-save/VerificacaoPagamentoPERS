@@ -37,6 +37,7 @@ from .certificados import (
 from .config import (
     CODIGOS_CREDITO_ATENDIDOS,
     SITUACAO_MENSAGENS_IMPORTANTES,
+    SITUACAO_SEM_PERMISSAO,
     MAX_ENVIOS_SEM_CONFIRMACAO,
     PROCURADORES_IGNORADOS,
     SITUACAO_VERIFICAR,
@@ -44,6 +45,7 @@ from .config import (
 )
 from .desfechos import (
     EmpresaBloqueadaNaCaixaPostal,
+    SemPermissaoPerdcomp,
     EnvioRecusadoPeloServidor,
     EnvioSemConfirmacao,
     ExecucaoInterrompida,
@@ -551,6 +553,7 @@ def executar(lote: Lote, portal, *, checkpoint=None, registro=None,
                     tentativa = 1
                     esperas_rede = 0
                     bloqueada = ""
+                    sem_permissao = False
                     while True:
                         try:
                             if not modulo_aberto:
@@ -576,6 +579,20 @@ def executar(lote: Lote, portal, *, checkpoint=None, registro=None,
                             # Tela num estado conhecido: a próxima linha segue direto
                             # pelo "Novo Documento" (pedido do usuário); senão recarrega.
                             modulo_aberto = desfecho.tela_conhecida
+                        except SemPermissaoPerdcomp as e:
+                            # Regra do usuário (19/11/2026): a procuração não dá poder
+                            # para o PER/DCOMP -> AA de todas as linhas da empresa e
+                            # próxima empresa.
+                            print(f"  -> [SEM PERMISSAO] {empresa.empresa.strip() or empresa.cnpj}: {e}. "
+                                  "Linhas da empresa marcadas; proxima empresa.")
+                            for outra in empresa.linhas[indice_linha:]:
+                                _registrar(outra, SITUACAO_SEM_PERMISSAO, str(e))
+                                if outra is not linha:
+                                    posicao += 1
+                                resultados.append(ResultadoLinha(outra.numero_linha, outra.rotulo,
+                                                                 True, SITUACAO_SEM_PERMISSAO))
+                            modulo_aberto = False
+                            sem_permissao = True
                         except EmpresaBloqueadaNaCaixaPostal as e:
                             # Antes do Enviar (depois dele é EnvioSemConfirmacao):
                             # abre as mensagens e refaz a linha (sem gastar
@@ -644,6 +661,8 @@ def executar(lote: Lote, portal, *, checkpoint=None, registro=None,
                           f"{(ultimo.detalhe if ultimo else '')[:80]}")
                     if bloqueada:
                         _falhar(empresa.linhas[indice_linha + 1:], bloqueada)
+                        break
+                    if sem_permissao:
                         break
 
                 # Com mensagens importantes não dá para trocar o perfil: sai
