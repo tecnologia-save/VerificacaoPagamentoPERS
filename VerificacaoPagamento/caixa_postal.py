@@ -145,8 +145,22 @@ def listar(page, cnpj: str) -> list[MensagemDaLista]:
     if dono != cnpj:
         raise CaixaPostalNaoReconhecida(
             f"a Caixa Postal aberta é de {dono or '(CNPJ não lido)'}, e não de {cnpj}: nada é aberto")
-    quadro.locator(SEL_ABRIR_FILTRO).first.click(timeout=TEMPO_LISTA_MS)
-    _escolher(page, quadro, OPCAO_IMPORTANTES, prefixo=True)
+    # O painel do filtro pode demorar a abrir (BARON, 19/11/2026: só o "Exibir:
+    # 20" da paginação estava visível). Espera o botão "Filtrar" e tenta de novo.
+    filtrar = quadro.get_by_role("button", name="Filtrar", exact=True).first
+    for tentativa in range(1, 5):
+        try:
+            if not filtrar.is_visible():
+                quadro.locator(SEL_ABRIR_FILTRO).first.click(timeout=TEMPO_LISTA_MS)
+                filtrar.wait_for(state="visible", timeout=10_000)
+            page.wait_for_timeout(1_000)
+            _escolher(page, quadro, OPCAO_IMPORTANTES, prefixo=True)
+            break
+        except Exception as e:  # noqa: BLE001 — painel ainda abrindo: de novo
+            if navegador_fechou(e) or tentativa == 4:
+                raise
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(2_000)
     _escolher(page, quadro, OPCAO_NAO_LIDA, prefixo=False)
     try:
         with page.expect_response(lambda r: CAMINHO_DA_LISTA in r.url and r.ok,
