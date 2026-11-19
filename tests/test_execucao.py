@@ -264,6 +264,35 @@ def test_procuracao_sem_poder_para_o_perdcomp_marca_a_empresa_e_segue():
     assert portal.tipos("modulo").count((CNPJ_A,)) == 1        # sem retentativas
 
 
+def test_rede_na_troca_de_perfil_reabre_o_navegador_e_nao_descarta_a_empresa():
+    """19/11/2026: net::ERR_BLOCKED_BY_CLIENT na troca de perfil derrubou 192
+    linhas como "perfil recusado". É a rede: fecha, espera e abre de novo."""
+    lote = _lote([(_linha(2, CNPJ_A), "Save"), (_linha(3, CNPJ_B), "Save"),
+                  (_linha(4, CNPJ_C), "Save")])
+
+    class Portal(PortalFalso):
+        quebrado = True
+        esperas = 0
+
+        def trocar_empresa(self, sessao, cnpj):
+            if self.quebrado:
+                self.quebrado = False
+                self.eventos.append(("troca", cnpj))
+                raise LoginNaoConcluido("rede na troca de perfil — PortalIndisponivel: "
+                                        "Page.goto: net::ERR_BLOCKED_BY_CLIENT")
+            super().trocar_empresa(sessao, cnpj)
+
+        def aguardar_rede(self):
+            self.esperas += 1
+
+    portal = Portal()
+    resultados = _resultado(executar(lote, portal))
+    assert all(ok for ok, _ in resultados.values())
+    assert portal.tipos("linha") == [(2, CNPJ_A), (3, CNPJ_B), (4, CNPJ_C)]
+    assert portal.tipos("login") == [("Save", CNPJ_A), ("Save", CNPJ_B)]   # reabriu
+    assert portal.esperas == 1
+
+
 def test_troca_que_nao_trocou_faz_login_novo_e_nunca_preenche_no_cnpj_errado():
     """O popup apareceu DEPOIS da conferência na entrada (não detectado): a
     troca do ecac_login 'dá certo' sem trocar. A conferência do perfil pega."""

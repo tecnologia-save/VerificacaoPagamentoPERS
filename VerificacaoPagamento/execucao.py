@@ -470,6 +470,10 @@ def executar(lote: Lote, portal, *, checkpoint=None, registro=None,
                     raise
                 print(f"  -> [REABRINDO] Sessao nao abriu ({type(e).__name__}: {str(e)[:120]}); "
                       f"abrindo o navegador de novo agora ({rodada + 1}/{MAX_REABERTURAS})...")
+                if erro_de_rede(e):
+                    aguardar = getattr(portal, "aguardar_rede", None)
+                    if aguardar is not None:
+                        aguardar()
 
     for grupo in lote.grupos:
         certificado = lote.certificados[grupo.certificado]

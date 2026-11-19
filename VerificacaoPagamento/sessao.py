@@ -354,7 +354,12 @@ def trocar_empresa(sessao: Sessao, cnpj: str) -> None:
 
     Levanta PerfilRecusado se o e-CAC recusar; deixa subir o erro de navegador
     fechado (quem chama reabre a sessão)."""
-    from ecac_login import AcessoBloqueado, garantir_acesso_ecac, ultima_recusa_de_perfil
+    from ecac_login import (
+        AcessoBloqueado,
+        PortalIndisponivel,
+        garantir_acesso_ecac,
+        ultima_recusa_de_perfil,
+    )
 
     if sessao.cnpj_ativo == cnpj:
         return
@@ -366,6 +371,12 @@ def trocar_empresa(sessao: Sessao, cnpj: str) -> None:
     except Exception as e:
         if navegador_fechou(e):
             raise
+        if isinstance(e, PortalIndisponivel) or "net::ERR_" in str(e):
+            # REDE, não a empresa (19/11/2026: ERR_BLOCKED_BY_CLIENT derrubou 192
+            # linhas como "perfil recusado"). Sobe como falha de sessão: quem
+            # chama fecha, espera o portal e abre o navegador de novo.
+            raise LoginNaoConcluido(f"rede na troca de perfil — {type(e).__name__}: "
+                                    f"{str(e)[:200]}") from None
         raise PerfilRecusado(f"{type(e).__name__}: {e}") from None
     if not ok:
         raise PerfilRecusado(ultima_recusa_de_perfil() or "perfil não confirmado")
