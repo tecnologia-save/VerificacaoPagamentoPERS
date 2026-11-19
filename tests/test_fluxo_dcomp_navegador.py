@@ -159,6 +159,13 @@ $('[name=btnProsseguir]').addEventListener('click', () => {
   msg(''); carregar();
   if (m.etapa === 'ident') {
     if ($('#perdcompAnterior').value.replace(/\\D/g, '').length !== 24) { msg('Campo obrigatório.'); return; }
+    if (__CANCELADO__) {
+      m.recusasCancelado = String(Number(m.recusasCancelado || 0) + 1);
+      // HTML real enviado pelo usuário (19/11/2026)
+      $('#msgs').innerHTML = '<p _ngcontent-ng-c148673025=""><span _ngcontent-ng-c148673025="" class="ng-star-inserted"><span _ngcontent-ng-c148673025="">O documento que contém o detalhamento do crédito encontra-se cancelado</span><br _ngcontent-ng-c148673025=""></span><!----></p>';
+      $('#alerta').classList.remove('oculto');
+      return;
+    }
     if ('__TIPO_CORRETO__' && txt('tipoCredito').indexOf('__TIPO_CORRETO__') !== 0) {
       m.recusasTipo = String(Number(m.recusasTipo || 0) + 1);
       msg('Tipo do crédito informado neste documento diferente do tipo de crédito do PER/DCOMP que contém o detalhamento do crédito');
@@ -195,7 +202,7 @@ MSG_OUTRO = ("A TRANSMISSÃO NÃO FOI CONCLUÍDA. O PER/DCOMP NÃO FOI TRANSMITI
 
 
 def _app(*, desfecho="pago", apto=True, com_termo=True, pendencias=False, volta_credito=False,
-         apaga_vencimento=False, tipo_correto="") -> str:
+         apaga_vencimento=False, tipo_correto="", cancelado=False) -> str:
     substituicoes = {
         "__RADIOS__": _radios(OPCOES_REAIS),
         "__RETIFICADORA__": _retificadora(),
@@ -217,6 +224,7 @@ def _app(*, desfecho="pago", apto=True, com_termo=True, pendencias=False, volta_
         "__PENDENCIAS__": "true" if pendencias else "false",
         "__VOLTA_CREDITO__": "true" if volta_credito else "false",
         "__TIPO_CORRETO__": tipo_correto,
+        "__CANCELADO__": "true" if cancelado else "false",
         "__APAGA_VENCIMENTO__": "true" if apaga_vencimento else "false",
         "__MSG_OUTRO__": MSG_OUTRO,
     }
@@ -395,6 +403,23 @@ def test_tipo_de_credito_divergente_e_detectado_na_hora(abrir):
         conferencias_identificacao=fp.conferencias_identificacao(page, tributo="PIS", perdcomp=PERDCOMP))
     assert desfecho.situacao == SITUACAO_PAGAMENTO_REALIZADO
     assert _estado(page)["recusasTipo"] == "1"
+
+
+def test_perdcomp_cancelado_e_detectado_na_hora(abrir):
+    """Mensagem real (19/11/2026) no Prosseguir da identificação: para logo com
+    PerdcompCancelado, sem esperar o prazo e sem enviar nada."""
+    import time
+
+    from VerificacaoPagamento.desfechos import PerdcompCancelado
+
+    page = abrir(cancelado=True, desfecho="pago")
+    inicio = time.monotonic()
+    with pytest.raises(PerdcompCancelado):
+        _declaracao(page, permitir_envio=True)
+    assert time.monotonic() - inicio < fp.ESPERA_AVANCO_MS / 1000
+    estado = _estado(page)
+    assert estado["envios"] == "0"
+    assert estado["recusasCancelado"] == "1"
 
 
 def test_envio_recusado_pelo_servidor_nao_e_quarentena(abrir, monkeypatch):

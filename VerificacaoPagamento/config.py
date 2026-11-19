@@ -105,6 +105,10 @@ SITUACAO_PROTOCOLADA = "Pagamento não realizado, protocolação feita"
 SITUACAO_MENSAGENS_IMPORTANTES = "Mensagens importantes não lidas na Caixa Postal"
 SITUACAO_TIPO_CREDITO_DIVERGENTE = ("Tipo do crédito informado neste documento diferente do "
                                     "tipo de crédito do PER/DCOMP")
+# No "Prosseguir" da identificação: "O documento que contém o detalhamento do
+# crédito encontra-se cancelado" (regra do usuário, 19/11/2026): grava isto na
+# AA e segue para a próxima linha.
+SITUACAO_PERDCOMP_CANCELADO = "Perdcomp cancelado"
 # "Enviar" clicado sem desfecho confirmado: NÃO se sabe se a Declaração foi
 # transmitida. A linha fica fora de todas as execuções até alguém conferir no
 # e-CAC — reenviar poderia gerar uma segunda Declaração de Compensação.

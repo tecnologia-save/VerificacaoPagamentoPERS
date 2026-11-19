@@ -10,9 +10,10 @@ import pytest
 from VerificacaoPagamento import portal as mod
 from VerificacaoPagamento.config import (
     SITUACAO_PAGAMENTO_REALIZADO,
+    SITUACAO_PERDCOMP_CANCELADO,
     SITUACAO_TIPO_CREDITO_DIVERGENTE,
 )
-from VerificacaoPagamento.desfechos import Desfecho, TipoCreditoDivergente
+from VerificacaoPagamento.desfechos import Desfecho, PerdcompCancelado, TipoCreditoDivergente
 from VerificacaoPagamento.planilha import LinhaPerdcomp
 
 CNPJ = "11111111000111"
@@ -74,6 +75,24 @@ def test_recusado_com_pis_e_cofins_vai_para_a_aa_sem_fechar_o_navegador(cenario)
     assert not desfecho.tributo_corrigido          # a coluna K não muda
     assert desfecho.tela_conhecida is False        # a próxima linha recarrega o módulo
     assert [e for e in eventos if e[0] == "preencher"] == [("preencher", "PIS"), ("preencher", "COFINS")]
+
+
+def test_perdcomp_cancelado_vai_para_a_aa_e_segue(cenario, monkeypatch):
+    """Regra do usuário (19/11/2026): "O documento que contém o detalhamento do
+    crédito encontra-se cancelado" -> AA "Perdcomp cancelado", próxima linha,
+    sem tentar o outro tributo."""
+    portal, sessao, eventos, recusados = cenario
+
+    def concluir_cancelado(page, **kw):
+        raise PerdcompCancelado("O documento que contém o detalhamento do crédito encontra-se cancelado")
+
+    monkeypatch.setattr(mod, "concluir_declaracao", concluir_cancelado)
+    desfecho = portal.processar_linha(sessao, _linha("PIS"))
+    assert desfecho.ok
+    assert desfecho.situacao == SITUACAO_PERDCOMP_CANCELADO == "Perdcomp cancelado"
+    assert desfecho.tela_conhecida is False        # a próxima linha recarrega o módulo
+    assert not desfecho.tributo_corrigido
+    assert [e for e in eventos if e[0] == "preencher"] == [("preencher", "PIS")]
 
 
 def test_aviso_de_mensagens_importantes_que_trava_a_linha_bloqueia_a_empresa(cenario, monkeypatch):

@@ -58,6 +58,13 @@ class TipoCreditoDivergente(Exception):
     coluna K está trocado. Quem chama inverte e refaz (regra do usuário)."""
 
 
+class PerdcompCancelado(Exception):
+    """No "Prosseguir" da identificação a Receita disse que o documento que
+    contém o detalhamento do crédito (o PER/DCOMP da coluna M) está cancelado.
+    É o resultado da linha (AA "Perdcomp cancelado"), não um erro: não se
+    refaz nem com o outro tributo."""
+
+
 class EmpresaBloqueadaNaCaixaPostal(Exception):
     """O e-CAC manda para a Caixa Postal em vez de abrir o PER/DCOMP: a empresa
     tem mensagem IMPORTANTE não lida (AGROFEG, 18/11/2026, "Parcelamento em

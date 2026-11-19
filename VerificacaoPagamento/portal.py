@@ -6,12 +6,17 @@ from pathlib import Path
 
 from . import sessao as _sessao
 from .certificados import Certificado
-from .config import PERMITIR_ACOES_REAIS_NO_ECAC, SITUACAO_TIPO_CREDITO_DIVERGENTE
+from .config import (
+    PERMITIR_ACOES_REAIS_NO_ECAC,
+    SITUACAO_PERDCOMP_CANCELADO,
+    SITUACAO_TIPO_CREDITO_DIVERGENTE,
+)
 from .desfechos import (
     Desfecho,
     EmpresaBloqueadaNaCaixaPostal,
     EnvioRecusadoPeloServidor,
     EnvioSemConfirmacao,
+    PerdcompCancelado,
     TipoCreditoDivergente,
 )
 from .diagnostico import capturar_tela
@@ -157,6 +162,14 @@ class PortalReal:
                     diagnostico=diagnostico,
                     conferencias_identificacao=conferencias_identificacao(
                         page, tributo=tributo, perdcomp=linha.perdcomp))
+            except PerdcompCancelado:
+                # Regra do usuário (19/11/2026): AA "Perdcomp cancelado" e segue,
+                # no mesmo navegador; a próxima linha recarrega o módulo.
+                print(f"  -> [CANCELADO] O PER/DCOMP da linha {linha.numero_linha} esta cancelado: "
+                      "vai para a AA e a execucao segue.")
+                return Desfecho(True, "O documento que contém o detalhamento do crédito "
+                                      "encontra-se cancelado.",
+                                situacao=SITUACAO_PERDCOMP_CANCELADO, tela_conhecida=False)
             except TipoCreditoDivergente:
                 if tentativa == 2:
                     # Recusado com os DOIS tributos: é o resultado da linha (AA) —

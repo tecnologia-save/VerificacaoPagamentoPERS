@@ -50,6 +50,7 @@ from .desfechos import (
     Desfecho,
     EnvioRecusadoPeloServidor,
     EnvioSemConfirmacao,
+    PerdcompCancelado,
     TipoCreditoDivergente,
 )
 from .formulario_perdcomp import (
@@ -116,6 +117,9 @@ TEXTO_NAO_PROSSEGUIR = "não é possível prosseguir"
 # Aviso da Receita quando o PIS/COFINS da linha não é o do PER/DCOMP anterior
 # (HTML enviado pelo usuário, 18/11/2026).
 TEXTO_TIPO_CREDITO_DIVERGENTE = "tipo de crédito do per/dcomp que contém o detalhamento"
+# "O documento que contém o detalhamento do crédito encontra-se cancelado"
+# (HTML enviado pelo usuário, 19/11/2026).
+TEXTO_PERDCOMP_CANCELADO = "detalhamento do crédito encontra-se cancelado"
 
 
 # "Aguarde a página carregar": a transmissão pode demorar (nas Protocolações já
@@ -226,16 +230,22 @@ def termo_e_litigio(page, diagnostico=None, conferencias_identificacao=()) -> No
     def _tipo_divergente() -> bool:
         return TEXTO_TIPO_CREDITO_DIVERGENTE in mensagens_da_tela(page).casefold()
 
+    def _cancelado() -> bool:
+        return TEXTO_PERDCOMP_CANCELADO in mensagens_da_tela(page).casefold()
+
     def _vigiar() -> bool:
         # Enquanto espera a próxima tela: responde "Sim" ao aviso do PER/DCOMP
-        # não original (no máximo 3 vezes) e para se o tipo de crédito divergir.
+        # não original (no máximo 3 vezes) e para se o tipo de crédito divergir
+        # ou se o PER/DCOMP estiver cancelado.
         if respostas_original[0] < 3 and responder_recuperar_original(page):
             respostas_original[0] += 1
-        return _tipo_divergente()
+        return _cancelado() or _tipo_divergente()
 
     apareceu = prosseguir_ate(page, (SELETOR_TERMO, SELETOR_LITIGIO), "identificacao",
                               conferencias=conferencias_identificacao, diagnostico=diagnostico,
                               parar_se=_vigiar)
+    if not apareceu and _cancelado():
+        raise PerdcompCancelado(mensagens_da_tela(page)[:200])
     if not apareceu and _tipo_divergente():
         raise TipoCreditoDivergente(mensagens_da_tela(page)[:200])
     if apareceu == SELETOR_TERMO:
