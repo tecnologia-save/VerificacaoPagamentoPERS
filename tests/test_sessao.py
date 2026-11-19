@@ -34,3 +34,12 @@ def test_portal_fora_alem_do_teto_vira_login_nao_concluido():
 
     with pytest.raises(LoginNaoConcluido, match="fora do ar"):
         esperar_portal(espera_s=0, maximo_s=0, sonda=lambda: False)
+
+
+def test_recusa_que_e_erro_interno_do_ecac_e_passageira():
+    from VerificacaoPagamento.sessao import recusa_passageira
+
+    assert recusa_passageira("ATENÇÃO: undefined")
+    assert recusa_passageira("ATENÇÃO: The request message was already sent. Cannot send the "
+                             "same request message multiple times.")
+    assert not recusa_passageira("Não existe procuração eletrônica para o CNPJ informado")

@@ -349,6 +349,17 @@ def abrir_sessao(certificado: Certificado, cnpj: str, *, project_dir: Path,
         _dormir(ESPERA_ENTRE_TENTATIVAS_S, checkpoint)
 
 
+# "Recusas" que são erro interno do e-CAC, e não da procuração (19/11/2026,
+# CITRUS NACIONAL e COMERCIAL VIANA): repetir com navegador novo resolve.
+RECUSAS_PASSAGEIRAS = ("undefined", "request message was already sent", "erro inesperado",
+                       "tente novamente")
+
+
+def recusa_passageira(motivo: str) -> bool:
+    texto = (motivo or "").casefold()
+    return any(t in texto for t in RECUSAS_PASSAGEIRAS)
+
+
 def trocar_empresa(sessao: Sessao, cnpj: str) -> None:
     """Troca o perfil para `cnpj` NA SESSÃO ABERTA (sem fechar o navegador).
 
@@ -379,5 +390,8 @@ def trocar_empresa(sessao: Sessao, cnpj: str) -> None:
                                     f"{str(e)[:200]}") from None
         raise PerfilRecusado(f"{type(e).__name__}: {e}") from None
     if not ok:
-        raise PerfilRecusado(ultima_recusa_de_perfil() or "perfil não confirmado")
+        motivo = ultima_recusa_de_perfil() or "perfil não confirmado"
+        if recusa_passageira(motivo):
+            raise LoginNaoConcluido(f"falha passageira do e-CAC na troca de perfil: {motivo}")
+        raise PerfilRecusado(motivo)
     sessao.cnpj_ativo = cnpj
