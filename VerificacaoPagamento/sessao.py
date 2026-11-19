@@ -339,7 +339,13 @@ def abrir_sessao(certificado: Certificado, cnpj: str, *, project_dir: Path,
         # O login chegou à troca de perfil e o e-CAC recusou ESTE CNPJ: não
         # adianta repetir, e as outras empresas do certificado ainda podem entrar.
         if not ultimo_erro and tentou_trocar_perfil():
-            raise PerfilRecusado(ultima_recusa_de_perfil() or "o e-CAC não aceitou o perfil")
+            motivo = ultima_recusa_de_perfil() or "o e-CAC não aceitou o perfil"
+            if not recusa_passageira(motivo):
+                raise PerfilRecusado(motivo)
+            # Erro interno do e-CAC (não da procuração): conta como login que
+            # não concluiu e tenta de novo.
+            ultimo_erro = f"falha passageira do e-CAC na troca de perfil: {motivo}"
+            print(f"[login] {ultimo_erro}")
 
         falhas += 1
         if falhas >= tentativas:
