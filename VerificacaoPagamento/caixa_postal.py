@@ -180,6 +180,22 @@ def listar(page, cnpj: str) -> list[MensagemDaLista]:
         raise CaixaPostalNaoReconhecida(str(e)) from None
 
 
+def _listar_insistindo(page, cnpj: str, tentativas: int = 3) -> list[MensagemDaLista]:
+    """`listar`, de novo depois de uma pausa se o portal falhar ("Erro ao
+    listar mensagem(ns)", CASA DE CARNES, 19/11/2026). A Caixa Postal de outro
+    CNPJ não é repetida."""
+    for tentativa in range(1, tentativas + 1):
+        try:
+            return listar(page, cnpj)
+        except Exception as e:  # noqa: BLE001
+            if navegador_fechou(e) or "nada é aberto" in str(e) or tentativa == tentativas:
+                raise
+            print(f"  -> [CAIXA POSTAL] Lista nao veio ({type(e).__name__}); tentando de novo "
+                  f"({tentativa + 1}/{tentativas})...")
+            page.wait_for_timeout(5_000)
+    raise AssertionError("inalcancavel")
+
+
 def _links_do_assunto(quadro, mensagem: MensagemDaLista) -> list:
     """Os links da mensagem (`.../mensagens/<isn>`) cujo TEXTO é o assunto (a
     linha tem outros links para a mesma mensagem, como o do remetente)."""
@@ -245,7 +261,7 @@ def abrir_todas(page, cnpj: str, *, ao_abrir: Callable[[str, str], None]) -> int
                 sem_confirmacao.pop(isn)
 
     for _rodada in range(MAX_RODADAS):
-        lista = listar(page, cnpj)
+        lista = _listar_insistindo(page, cnpj)
         _conferir(lista)
         if not lista:
             return len(anotadas)
@@ -258,7 +274,7 @@ def abrir_todas(page, cnpj: str, *, ao_abrir: Callable[[str, str], None]) -> int
                 _anotar(mensagem, titulo)
             else:
                 sem_confirmacao[mensagem.isn] = mensagem
-    restantes = listar(page, cnpj)
+    restantes = _listar_insistindo(page, cnpj)
     _conferir(restantes)
     if restantes:
         raise CaixaPostalNaoReconhecida(

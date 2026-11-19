@@ -49,6 +49,7 @@ def caixa(monkeypatch):
         return True, f"Titulo {mensagem.isn}"
 
     monkeypatch.setattr(cp, "listar", listar)
+    monkeypatch.setattr(cp, "_listar_insistindo", lambda page, cnpj: listar(page, cnpj))
     monkeypatch.setattr(cp, "abrir", abrir)
     return estado
 
