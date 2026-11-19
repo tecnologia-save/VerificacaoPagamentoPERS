@@ -358,7 +358,9 @@ def abrir_sessao(certificado: Certificado, cnpj: str, *, project_dir: Path,
 # "Recusas" que são erro interno do e-CAC, e não da procuração (19/11/2026,
 # CITRUS NACIONAL e COMERCIAL VIANA): repetir com navegador novo resolve.
 RECUSAS_PASSAGEIRAS = ("undefined", "request message was already sent", "erro inesperado",
-                       "tente novamente")
+                       "tente novamente",
+                       # sem mensagem nenhuma: a tela não reagiu ao "Alterar" (18:49, 19/11/2026)
+                       "perfil não confirmado", "nao confirmada")
 
 
 def recusa_passageira(motivo: str) -> bool:

@@ -42,4 +42,5 @@ def test_recusa_que_e_erro_interno_do_ecac_e_passageira():
     assert recusa_passageira("ATENÇÃO: undefined")
     assert recusa_passageira("ATENÇÃO: The request message was already sent. Cannot send the "
                              "same request message multiple times.")
+    assert recusa_passageira("perfil não confirmado")
     assert not recusa_passageira("Não existe procuração eletrônica para o CNPJ informado")
