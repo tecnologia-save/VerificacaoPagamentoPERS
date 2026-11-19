@@ -158,6 +158,89 @@ def test_empresa_com_mensagens_importantes_marca_a_linha_sai_pela_caixa_postal_e
     assert portal.tipos("troca") == [(CNPJ_C,)]
 
 
+def test_mensagens_importantes_sao_abertas_anotadas_e_a_empresa_segue():
+    """Regra do usuário (19/11/2026, a nova): o aviso apareceu -> abre as
+    importantes não lidas, uma linha por mensagem na aba das abertas (CNPJ,
+    empresa, certificado, assunto) e as linhas da empresa seguem."""
+    from VerificacaoPagamento.config import SITUACAO_MENSAGENS_IMPORTANTES
+
+    lote = _lote([(_linha(2, CNPJ_A), "Save"), (_linha(3, CNPJ_A), "Save"),
+                  (_linha(4, CNPJ_B), "Save")])
+    portal = PortalQueAbreMensagens(mensagens={CNPJ_A})
+    registro = RegistroFalso()
+    resultados = _resultado(executar(lote, portal, registro=registro))
+    assert all(ok for ok, _ in resultados.values())
+    assert portal.tipos("abrir_mensagens") == [(CNPJ_A,)]
+    mensagens = [a[1:] for a in registro.anotacoes if a[0] == "mensagem"]
+    assert mensagens == [(CNPJ_A, "EMPRESA 11", "Save", "Intimação para regularizar", "901"),
+                         (CNPJ_A, "EMPRESA 11", "Save", "Termo de exclusão do Simples", "902")]
+    assert portal.tipos("linha") == [(2, CNPJ_A), (3, CNPJ_A), (4, CNPJ_B)]
+    assert not any(a[0] == SITUACAO_MENSAGENS_IMPORTANTES for a in registro.anotacoes)
+    # desbloqueada, a troca de perfil volta a valer: um login só
+    assert portal.tipos("login") == [("Save", CNPJ_A)]
+    assert portal.tipos("troca") == [(CNPJ_B,)]
+
+
+def test_sem_conseguir_abrir_as_mensagens_vale_a_regra_antiga():
+    from VerificacaoPagamento.config import SITUACAO_MENSAGENS_IMPORTANTES
+
+    lote = _lote([(_linha(2, CNPJ_A), "Save"), (_linha(3, CNPJ_A), "Save"),
+                  (_linha(4, CNPJ_B), "Save")])
+    portal = PortalQueAbreMensagens(mensagens={CNPJ_A}, falha_ao_abrir={CNPJ_A})
+    registro = RegistroFalso()
+    resultados = _resultado(executar(lote, portal, registro=registro))
+    assert portal.tipos("abrir_mensagens") == [(CNPJ_A,)]
+    assert all(e[1] != CNPJ_A for e in portal.tipos("linha"))
+    assert (SITUACAO_MENSAGENS_IMPORTANTES, 2) in registro.anotacoes
+    assert resultados[2][0] and not resultados[3][0] and resultados[4][0]
+    assert ("Save", False, True) in portal.tipos("encerrar")      # saiu pela Caixa Postal
+
+
+def test_bloqueio_no_modulo_abre_as_mensagens_e_refaz_a_linha_sem_gastar_tentativa():
+    from VerificacaoPagamento.desfechos import EmpresaBloqueadaNaCaixaPostal
+
+    lote = _lote([(_linha(2, CNPJ_A), "Save"), (_linha(3, CNPJ_A), "Save")])
+
+    class Portal(PortalQueAbreMensagens):
+        bloqueada = True
+
+        def abrir_modulo(self, sessao):
+            super().abrir_modulo(sessao)
+            if self.bloqueada:
+                raise EmpresaBloqueadaNaCaixaPostal("Caixa Postal no lugar do PER/DCOMP")
+
+        def abrir_mensagens_importantes(self, sessao, cnpj, *, ao_abrir):
+            self.bloqueada = False
+            return super().abrir_mensagens_importantes(sessao, cnpj, ao_abrir=ao_abrir)
+
+    portal = Portal()
+    registro = RegistroFalso()
+    resultados = _resultado(executar(lote, portal, registro=registro))
+    assert resultados[2][0] and resultados[3][0]
+    assert portal.tipos("abrir_mensagens") == [(CNPJ_A,)]
+    assert portal.tipos("linha") == [(2, CNPJ_A), (3, CNPJ_A)]
+    assert portal.tipos("modulo").count((CNPJ_A,)) == 2      # bloqueado, depois liberado
+
+
+def test_mensagens_que_continuam_travando_sao_tentadas_uma_vez_so():
+    from VerificacaoPagamento.config import SITUACAO_MENSAGENS_IMPORTANTES
+    from VerificacaoPagamento.desfechos import EmpresaBloqueadaNaCaixaPostal
+
+    lote = _lote([(_linha(2, CNPJ_A), "Save"), (_linha(3, CNPJ_A), "Save")])
+
+    class Portal(PortalQueAbreMensagens):
+        def abrir_modulo(self, sessao):
+            super().abrir_modulo(sessao)
+            raise EmpresaBloqueadaNaCaixaPostal("Caixa Postal no lugar do PER/DCOMP")
+
+    portal = Portal()
+    registro = RegistroFalso()
+    executar(lote, portal, registro=registro)
+    assert portal.tipos("abrir_mensagens") == [(CNPJ_A,)]
+    assert (SITUACAO_MENSAGENS_IMPORTANTES, 2) in registro.anotacoes
+    assert portal.tipos("linha") == []
+
+
 def test_troca_que_nao_trocou_faz_login_novo_e_nunca_preenche_no_cnpj_errado():
     """O popup apareceu DEPOIS da conferência na entrada (não detectado): a
     troca do ecac_login 'dá certo' sem trocar. A conferência do perfil pega."""
@@ -343,6 +426,27 @@ class RegistroFalso:
 
     def registrar(self, linha, situacao, detalhe=""):
         self.anotacoes.append((situacao, linha.numero_linha))
+
+    def registrar_mensagem(self, *, cnpj, empresa, certificado, assunto, isn):
+        self.anotacoes.append(("mensagem", cnpj, empresa, certificado, assunto, isn))
+
+
+class PortalQueAbreMensagens(PortalFalso):
+    """Abre as mensagens importantes na Caixa Postal: `falha_ao_abrir` = CNPJs
+    em que não dá (a regra antiga vale)."""
+
+    def __init__(self, *, falha_ao_abrir=(), **kw):
+        super().__init__(**kw)
+        self.falha_ao_abrir = set(falha_ao_abrir)
+
+    def abrir_mensagens_importantes(self, sessao, cnpj, *, ao_abrir):
+        self.eventos.append(("abrir_mensagens", cnpj))
+        if cnpj in self.falha_ao_abrir:
+            raise RuntimeError("filtro da Caixa Postal sem resposta")
+        ao_abrir("901", "Intimação para regularizar")
+        ao_abrir("902", "Termo de exclusão do Simples")
+        self.mensagens.discard(cnpj)          # o aviso some
+        return 2
 
 
 def test_desfecho_vai_para_o_registro_e_a_proxima_linha_segue_pelo_novo_documento():

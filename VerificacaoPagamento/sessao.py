@@ -9,10 +9,11 @@ Sair SEMPRE com "Sair com Segurança" antes de fechar: o certificado tem número
 limitado de perfis logados ao mesmo tempo e fechar o Chrome não libera a vaga
 do lado da Receita (`ecac_login.encerrar_sessao` faz as duas coisas).
 
-MENSAGENS IMPORTANTES (regra do usuário, 18/11/2026): empresa com o popup de
-"mensagens importantes" é processada normalmente (o PER/DCOMP pelo link não é
-bloqueado), mas depois dela NÃO dá para trocar o perfil. Então, no fim dela:
-Caixa Postal -> Sair com Segurança -> fecha -> login novo para a próxima.
+MENSAGENS IMPORTANTES: desde 19/11/2026 (regra do usuário) a automação abre
+as importantes não lidas na Caixa Postal (caixa_postal.py) e segue com a
+empresa. Se não conseguir, vale o procedimento anterior: depois da empresa NÃO
+dá para trocar o perfil, então Caixa Postal -> Sair com Segurança -> fecha ->
+login novo para a próxima.
 
 ATENÇÃO — por que o perfil ativo é CONFERIDO: o `ecac_login` procura o popup
 ANTES de trocar o perfil e, se o encontra, clica "Ir para a Caixa Postal" e

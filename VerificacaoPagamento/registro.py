@@ -34,7 +34,12 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from .config import SITUACAO_PROTOCOLADA, SITUACAO_VERIFICAR
+from .config import (
+    ABA_MENSAGENS_ABERTAS,
+    SITUACAO_MENSAGENS_IMPORTANTES,
+    SITUACAO_PROTOCOLADA,
+    SITUACAO_VERIFICAR,
+)
 from .desfechos import numero_documento
 from .planilha import (
     COLUNA_NUMERO_DOCUMENTO,
@@ -60,6 +65,11 @@ FORMATO_DATA_HORA = "%d/%m/%Y %H:%M:%S"
 ENVIO_EM_ANDAMENTO = timedelta(minutes=15)
 # Gravação da planilha: uma sessão de cada vez (trava entre processos).
 ESPERA_TRAVA_S = 300
+# Mensagens importantes abertas (regra do usuário, 19/11/2026): uma linha por
+# mensagem na aba ABA_MENSAGENS_ABERTAS; diário próprio, como o da AA.
+CABECALHO_MENSAGENS = ("CNPJ", "Empresa", "Certificado", "Assunto da mensagem", "Aberta em",
+                       "ID da mensagem")
+CAMPOS_MENSAGENS = ("cnpj", "empresa", "certificado", "assunto", "data_hora", "isn")
 
 
 def _ler_diario(arquivo: Path, *, envios_em_andamento_desde: datetime | None = None
@@ -123,12 +133,27 @@ def nome_diario(planilha: Path, sessao: int = 1) -> str:
     return f"{planilha.stem}{sufixo}_verificacao.csv"
 
 
+def nome_diario_mensagens(planilha: Path, sessao: int = 1) -> str:
+    sufixo = "" if sessao == 1 else f"_sessao{sessao}"
+    return f"{planilha.stem}{sufixo}_mensagens.csv"
+
+
+def _ler_mensagens(arquivo: Path) -> list[tuple]:
+    """As linhas (na ordem de CABECALHO_MENSAGENS) de um diário de mensagens."""
+    if not arquivo.exists():
+        return []
+    with open(arquivo, encoding="utf-8-sig", newline="") as f:
+        return [tuple(registro.get(c) or "" for c in CAMPOS_MENSAGENS)
+                for registro in csv.DictReader(f, delimiter=";")]
+
+
 class RegistroResultados:
     def __init__(self, caminho_planilha: str | Path, pasta_diario: Path, pasta_backup: Path, *,
                  salvar_a_cada: int = 1, intervalo_s: float = 600,
                  em_segundo_plano: bool = False, sessao: int = 1) -> None:
         self.planilha = Path(caminho_planilha)
         self.diario = Path(pasta_diario) / nome_diario(self.planilha, sessao)
+        self.diario_mensagens = Path(pasta_diario) / nome_diario_mensagens(self.planilha, sessao)
         self._arquivo_trava = Path(pasta_diario) / f"{self.planilha.stem}.trava"
         self._pasta_backup = Path(pasta_backup)
         self._salvar_a_cada = salvar_a_cada
@@ -141,6 +166,8 @@ class RegistroResultados:
         self._tributos: dict[int, tuple[str, str]] = {}
         # numero_linha -> (perdcomp, número da Declaração) para a coluna AB
         self._numeros: dict[int, tuple[str, str]] = {}
+        # (cnpj, id da mensagem) -> linha da aba das mensagens importantes abertas
+        self._mensagens: dict[tuple[str, str], tuple] = {}
         self.ultima_falha = ""  # motivo da última gravação da planilha que falhou
         # Em segundo plano (pedido do usuário, 18/11/2026): gravar a planilha leva
         # ~24 s e segurava o "Novo Documento" da linha seguinte. O diário continua
@@ -159,7 +186,8 @@ class RegistroResultados:
             self._acordar.wait(timeout=5)
             self._acordar.clear()
             with self._trava:
-                ha_fila = bool(self._a_gravar or self._numeros or self._tributos)
+                ha_fila = bool(self._a_gravar or self._numeros or self._tributos
+                               or self._mensagens)
             if ha_fila:
                 self.salvar()
             if self._parar:
@@ -204,7 +232,7 @@ class RegistroResultados:
         conhecidos: dict[str, str] = {}
 
         def _guardar(perdcomp: str, situacao: str) -> None:
-            if not perdcomp or not situacao:
+            if not perdcomp or not situacao or situacao == SITUACAO_MENSAGENS_IMPORTANTES:
                 return
             atual = conhecidos.get(perdcomp)
             if atual is None or (atual == SITUACAO_VERIFICAR and situacao != SITUACAO_VERIFICAR):
@@ -229,17 +257,53 @@ class RegistroResultados:
         por_perdcomp = self._desfechos_por_perdcomp(dados)
         aplicadas = 0
         for linha in dados.linhas:
-            if linha.situacao_verificacao.strip():
+            if not linha.pendente:
                 continue
             situacao = (finais.get((linha.numero_linha, linha.perdcomp))
                         or por_perdcomp.get(linha.perdcomp))
-            if situacao:
+            # A marca de mensagens importantes não é resultado (a linha é refeita).
+            if situacao and situacao != SITUACAO_MENSAGENS_IMPORTANTES:
                 linha.situacao_verificacao = situacao
                 with self._trava:
                     self._a_gravar[linha.numero_linha] = (linha.perdcomp, situacao)
                 aplicadas += 1
         self._reconciliar_numeros(dados)
+        try:
+            self.reconciliar_mensagens()
+        except Exception as e:  # noqa: BLE001 — a aba das mensagens nunca impede a execução
+            print(f"  -> [AVISO] Diario das mensagens nao conferido ({type(e).__name__}).")
         return aplicadas
+
+    def reconciliar_mensagens(self) -> int:
+        """Mensagens dos diários desta planilha (todas as sessões) que ainda não
+        estão na aba das abertas entram na fila. Devolve quantas."""
+        from openpyxl import load_workbook
+
+        pasta = self.diario_mensagens.parent
+        arquivos = [pasta / f"{self.planilha.stem}_mensagens.csv",
+                    *sorted(pasta.glob(f"{self.planilha.stem}_sessao*_mensagens.csv"))]
+        anotadas = [linha for arquivo in arquivos for linha in _ler_mensagens(arquivo)]
+        if not anotadas:
+            return 0
+        workbook = load_workbook(self.planilha, read_only=True)
+        try:
+            existentes = set()
+            if ABA_MENSAGENS_ABERTAS in workbook.sheetnames:
+                for valores in workbook[ABA_MENSAGENS_ABERTAS].iter_rows(min_row=2, values_only=True):
+                    if valores and len(valores) >= 6:
+                        existentes.add((str(valores[0] or "").strip(), str(valores[5] or "").strip()))
+        finally:
+            workbook.close()
+        novas = 0
+        with self._trava:
+            for linha in anotadas:
+                chave = (linha[0], linha[5])
+                if chave not in existentes and chave not in self._mensagens:
+                    self._mensagens[chave] = linha
+                    novas += 1
+        if novas:
+            self._acordar.set()
+        return novas
 
     def _reconciliar_numeros(self, dados: DadosPlanilha) -> int:
         """Coluna AB das linhas protocoladas que ainda não a têm, pelo número
@@ -301,9 +365,31 @@ class RegistroResultados:
         else:
             self.salvar()
 
+    def registrar_mensagem(self, *, cnpj: str, empresa: str, certificado: str, assunto: str,
+                           isn: str) -> None:
+        """Uma mensagem importante aberta: diário na hora (fsync) e a aba das
+        abertas na próxima gravação da planilha."""
+        linha = (cnpj, empresa, certificado, " ".join(str(assunto or "").split()),
+                 datetime.now().strftime(FORMATO_DATA_HORA), str(isn))
+        self.diario_mensagens.parent.mkdir(parents=True, exist_ok=True)
+        novo = not self.diario_mensagens.exists()
+        with open(self.diario_mensagens, "a", encoding="utf-8-sig", newline="") as f:
+            escritor = csv.writer(f, delimiter=";")
+            if novo:
+                escritor.writerow(CAMPOS_MENSAGENS)
+            escritor.writerow(linha)
+            f.flush()
+            os.fsync(f.fileno())
+        with self._trava:
+            self._mensagens[(linha[0], linha[5])] = linha
+        if self._thread is not None:
+            self._acordar.set()
+        else:
+            self.salvar()
+
     @property
     def pendentes_de_gravacao(self) -> int:
-        return len(self._a_gravar) + len(self._numeros)
+        return len(self._a_gravar) + len(self._numeros) + len(self._mensagens)
 
     # ── planilha ─────────────────────────────────────────────────────────────
     def _backup(self) -> None:
@@ -348,12 +434,14 @@ class RegistroResultados:
             fila = dict(self._a_gravar)
             tributos = dict(self._tributos)
             numeros = dict(self._numeros)
-        if not fila and not tributos and not numeros:
+            mensagens = dict(self._mensagens)
+        if not fila and not tributos and not numeros and not mensagens:
             return True
         temporario = self.planilha.with_name(f"~gravando_{self.planilha.name}")
         try:
             with self._trava_entre_sessoes():
-                gravadas = self._gravar_na_planilha(fila, tributos, numeros, temporario)
+                gravadas = self._gravar_na_planilha(fila, tributos, numeros, temporario,
+                                                    mensagens)
         except Exception as e:  # noqa: BLE001 — o diário já tem tudo; tenta de novo depois
             self.ultima_falha = f"{type(e).__name__}: {e}"
             print(f"  -> [AVISO] A planilha nao pode ser gravada agora ({type(e).__name__}) — "
@@ -376,12 +464,15 @@ class RegistroResultados:
             for numero in numeros:
                 if self._numeros.get(numero) == numeros[numero]:
                     self._numeros.pop(numero, None)
+            for chave in mensagens:
+                self._mensagens.pop(chave, None)
         self._ultimo_save = time.monotonic()
         self.ultima_falha = ""
         print("  -> Planilha gravada.")
         return True
 
-    def _gravar_na_planilha(self, fila, tributos, numeros, temporario: Path) -> list[int]:
+    def _gravar_na_planilha(self, fila, tributos, numeros, temporario: Path,
+                            mensagens=None) -> list[int]:
         from openpyxl import load_workbook
 
         self._backup()
@@ -417,8 +508,34 @@ class RegistroResultados:
                 lido = re.sub(r"\D", "", str(aba[f"{COLUNA_PERDCOMP}{numero}"].value or ""))
                 if lido == perdcomp:
                     aba[f"{COLUNA_NUMERO_DOCUMENTO}{numero}"] = documento
+            if mensagens:
+                self._gravar_mensagens(workbook, mensagens)
             workbook.save(temporario)
         finally:
             workbook.close()
         os.replace(temporario, self.planilha)
         return gravadas
+
+    @staticmethod
+    def _gravar_mensagens(workbook, mensagens) -> None:
+        """Acrescenta as mensagens à aba das abertas (criada no fim, com o
+        cabeçalho, se não existir). A mesma mensagem (CNPJ + ID) não repete."""
+        from openpyxl.styles import Font
+
+        if ABA_MENSAGENS_ABERTAS in workbook.sheetnames:
+            aba = workbook[ABA_MENSAGENS_ABERTAS]
+        else:
+            aba = workbook.create_sheet(ABA_MENSAGENS_ABERTAS)
+            aba.append(CABECALHO_MENSAGENS)
+            for celula in aba[1]:
+                celula.font = Font(bold=True)
+            for letra, largura in zip("ABCDEF", (18, 45, 22, 90, 20, 16)):
+                aba.column_dimensions[letra].width = largura
+        existentes = {(str(v[0] or "").strip(), str(v[5] or "").strip())
+                      for v in aba.iter_rows(min_row=2, values_only=True) if v and len(v) >= 6}
+        novas = [linha for chave, linha in mensagens.items() if chave not in existentes]
+        for linha in novas:
+            aba.append(list(linha))
+        if novas:
+            print(f"  -> {len(novas)} mensagem(ns) importante(s) aberta(s) na aba "
+                  f"'{ABA_MENSAGENS_ABERTAS}'.")

@@ -99,10 +99,15 @@ SITUACAO_PAGAMENTO_REALIZADO = "Pagamento realizado"
 SITUACAO_PROTOCOLADA = "Pagamento não realizado, protocolação feita"
 # A Receita recusou o tipo de crédito com PIS E com COFINS (regra do usuário,
 # 18/11/2026): grava isto na AA e segue, no mesmo navegador.
-# O aviso de mensagens importantes não lidas apareceu (regra do usuário,
-# 19/11/2026): marca a linha, Caixa Postal (sem abrir mensagens), Sair com
-# Segurança e próxima empresa.
+# O aviso de mensagens importantes não lidas apareceu. Regra do usuário
+# (19/11/2026, a nova): a automação ABRE as importantes não lidas na Caixa
+# Postal (ver caixa_postal.py), anota cada uma na aba ABA_MENSAGENS_ABERTAS e
+# segue com a empresa. Esta marca na AA só sobra quando não deu para abrir
+# (a regra antiga: marca a linha, Sair com Segurança e próxima empresa) — e
+# NÃO é resultado: a linha volta ao lote na próxima execução.
 SITUACAO_MENSAGENS_IMPORTANTES = "Mensagens importantes não lidas na Caixa Postal"
+# Aba da planilha com uma linha por mensagem importante aberta pela automação.
+ABA_MENSAGENS_ABERTAS = "Mensagens importantes abertas"
 SITUACAO_TIPO_CREDITO_DIVERGENTE = ("Tipo do crédito informado neste documento diferente do "
                                     "tipo de crédito do PER/DCOMP")
 # No "Prosseguir" da identificação: "O documento que contém o detalhamento do

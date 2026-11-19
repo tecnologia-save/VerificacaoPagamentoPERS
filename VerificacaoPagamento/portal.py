@@ -4,6 +4,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+from . import caixa_postal as _caixa_postal
 from . import sessao as _sessao
 from .certificados import Certificado
 from .config import (
@@ -95,6 +96,18 @@ class PortalReal:
         e mais ESPERA_ERRO_REDE_S — a sonda volta antes do proxy do certificado."""
         _sessao.esperar_portal(self._checkpoint)
         time.sleep(ESPERA_ERRO_REDE_S)
+
+    def abrir_mensagens_importantes(self, sessao: _sessao.Sessao, cnpj: str, *,
+                                    ao_abrir) -> int:
+        """Abre as mensagens importantes não lidas da empresa (regra do usuário,
+        19/11/2026 — ver caixa_postal.py). `ao_abrir(isn, assunto)` a cada uma.
+        Devolve quantas; levanta se sobrar alguma não lida."""
+        try:
+            return _caixa_postal.abrir_todas(sessao.page, cnpj, ao_abrir=ao_abrir)
+        except Exception as e:
+            if not navegador_fechou(e):
+                self.capturar(sessao, f"caixa_postal_{cnpj}")
+            raise
 
     # ── PER/DCOMP ────────────────────────────────────────────────────────────
     def abrir_modulo(self, sessao: _sessao.Sessao) -> None:

@@ -33,6 +33,8 @@ from typing import Any
 
 from openpyxl import load_workbook
 
+from .config import SITUACAO_MENSAGENS_IMPORTANTES
+
 # Colunas lidas (letra -> campo). A coluna AA é a SAÍDA da automação.
 COLUNA_PARCEIRO = "A"
 COLUNA_PROCURADOR = "B"
@@ -180,8 +182,11 @@ class LinhaPerdcomp:
     @property
     def pendente(self) -> bool:
         """Pendente = coluna AA vazia. Qualquer resultado gravado ali (inclusive
-        "Verificar no e-CAC") tira a linha das próximas execuções."""
-        return not self.situacao_verificacao.strip()
+        "Verificar no e-CAC") tira a linha das próximas execuções — menos a
+        marca de mensagens importantes não lidas, que não é resultado: com a
+        regra de 19/11/2026 a automação abre as mensagens e refaz a linha."""
+        situacao = self.situacao_verificacao.strip()
+        return not situacao or situacao == SITUACAO_MENSAGENS_IMPORTANTES
 
 
 @dataclass

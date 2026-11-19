@@ -384,11 +384,48 @@ def executar(lote: Lote, portal, *, checkpoint=None, registro=None,
             raise EmpresaBloqueadaNaCaixaPostal("aviso de mensagens importantes não lidas ao entrar "
                                                 "na empresa")
 
+    tentou_desbloquear: set[str] = set()
+
+    def _desbloquear(empresa, certificado: Certificado) -> bool:
+        """Regra do usuário (19/11/2026, a nova): o aviso de mensagens
+        importantes apareceu -> abre na Caixa Postal TODAS as importantes não
+        lidas, anota cada uma na aba das mensagens abertas e segue com as linhas
+        da empresa. Uma tentativa por empresa nesta execução. False = não deu
+        (a regra antiga vale: `_marcar_mensagens_importantes`)."""
+        nonlocal modulo_aberto
+        abrir = getattr(portal, "abrir_mensagens_importantes", None)
+        if abrir is None or sessao is None or empresa.cnpj in tentou_desbloquear:
+            return False
+        tentou_desbloquear.add(empresa.cnpj)
+        nome = empresa.empresa.strip() or empresa.cnpj
+        print(f"  -> [CAIXA POSTAL] {nome}: mensagens importantes nao lidas; abrindo na Caixa "
+              "Postal...")
+
+        def _anotar(isn: str, assunto: str) -> None:
+            if registro is not None and hasattr(registro, "registrar_mensagem"):
+                registro.registrar_mensagem(cnpj=empresa.cnpj, empresa=nome,
+                                            certificado=certificado.nome, assunto=assunto, isn=isn)
+
+        try:
+            abertas = abrir(sessao, empresa.cnpj, ao_abrir=_anotar)
+        except Exception as e:  # noqa: BLE001 — sem desbloquear, a regra antiga
+            print(f"  -> [CAIXA POSTAL] Nao foi possivel abrir as mensagens: {type(e).__name__}: "
+                  f"{str(e)[:160]}")
+            if navegador_fechou(e):
+                _largar_sessao(morta=True)
+            return False
+        print(f"  -> [CAIXA POSTAL] {abertas} mensagem(ns) importante(s) aberta(s); seguindo com "
+              "as linhas da empresa.")
+        sessao.mensagens_importantes = False
+        modulo_aberto = False
+        return True
+
     def _marcar_mensagens_importantes(empresa, linha: LinhaPerdcomp, e: Exception) -> str:
-        """Regra do usuário (19/11/2026): o aviso de mensagens importantes
-        apareceu -> marca ESTA linha na AA, sai pela Caixa Postal (sem abrir
-        mensagens) e vai para a próxima empresa. Devolve o motivo para as
-        outras linhas da empresa (que ficam para o próximo passe)."""
+        """Quando as mensagens NÃO puderam ser abertas (`_desbloquear` falhou):
+        a regra anterior — marca ESTA linha na AA, sai pela Caixa Postal e vai
+        para a próxima empresa. A marca não é resultado: a linha volta ao lote
+        na próxima execução. Devolve o motivo para as outras linhas da empresa
+        (que ficam para o próximo passe)."""
         nonlocal posicao
         print(f"  -> [CAIXA POSTAL] {empresa.empresa.strip() or empresa.cnpj}: {e}. Linha "
               f"{linha.numero_linha} marcada; saindo pela Caixa Postal para a proxima empresa.")
@@ -461,11 +498,14 @@ def executar(lote: Lote, portal, *, checkpoint=None, registro=None,
                     _falhar(empresa.linhas, f"e-CAC recusou o perfil da empresa: {e}")
                     continue
                 except EmpresaBloqueadaNaCaixaPostal as e:
-                    posicao += 1
-                    motivo = _marcar_mensagens_importantes(empresa, empresa.linhas[0], e)
-                    _falhar(empresa.linhas[1:], motivo)
-                    _largar_sessao()        # Caixa Postal + Sair com Segurança
-                    continue
+                    if not _desbloquear(empresa, certificado):
+                        posicao += 1
+                        motivo = _marcar_mensagens_importantes(empresa, empresa.linhas[0], e)
+                        _falhar(empresa.linhas[1:], motivo)
+                        _largar_sessao()        # Caixa Postal + Sair com Segurança
+                        continue
+                    falhas_login = 0
+                    modulo_aberto = False
                 except LoginNaoConcluido as e:
                     falhas_login += 1
                     print(f"  -> [ERRO] Login nao concluido: {e}")
@@ -485,11 +525,12 @@ def executar(lote: Lote, portal, *, checkpoint=None, registro=None,
                         try:
                             _entrar_insistindo(certificado, empresa.cnpj)
                         except EmpresaBloqueadaNaCaixaPostal as e:
-                            posicao += 1
-                            motivo = _marcar_mensagens_importantes(empresa, linha, e)
-                            _falhar(empresa.linhas[indice_linha + 1:], motivo)
-                            _largar_sessao()
-                            break
+                            if not _desbloquear(empresa, certificado):
+                                posicao += 1
+                                motivo = _marcar_mensagens_importantes(empresa, linha, e)
+                                _falhar(empresa.linhas[indice_linha + 1:], motivo)
+                                _largar_sessao()
+                                break
                         except Exception as e:  # noqa: BLE001 — falha só do resto desta empresa
                             print(f"  -> [ERRO] Nao foi possivel reabrir a sessao: {type(e).__name__}: {e}")
                             _largar_sessao(morta=navegador_fechou(e))
@@ -537,9 +578,12 @@ def executar(lote: Lote, portal, *, checkpoint=None, registro=None,
                             modulo_aberto = desfecho.tela_conhecida
                         except EmpresaBloqueadaNaCaixaPostal as e:
                             # Antes do Enviar (depois dele é EnvioSemConfirmacao):
-                            # marca a linha, sai pela Caixa Postal e próxima empresa.
-                            bloqueada = _marcar_mensagens_importantes(empresa, linha, e)
+                            # abre as mensagens e refaz a linha (sem gastar
+                            # tentativa); não dando, marca a linha e próxima empresa.
                             modulo_aberto = False
+                            if _desbloquear(empresa, certificado):
+                                continue
+                            bloqueada = _marcar_mensagens_importantes(empresa, linha, e)
                         except EnvioSemConfirmacao as e:
                             envios_sem_confirmacao += 1
                             print(f"  -> [ERRO] Linha {linha.numero_linha}: ENVIO SEM CONFIRMACAO — {e}")

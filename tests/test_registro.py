@@ -37,6 +37,52 @@ def _aa(caminho):
     return [aba[f"AA{n}"].value for n in range(1, 5)]
 
 
+def test_mensagem_aberta_vai_para_a_aba_nova_sem_repetir(registro, planilha):
+    from VerificacaoPagamento.config import ABA_MENSAGENS_ABERTAS
+
+    for _ in range(2):
+        registro.registrar_mensagem(cnpj="11222333000181", empresa="EMPRESA FICTICIA",
+                                    certificado="Save", assunto="Intimação  fiscal", isn="901")
+    registro.registrar_mensagem(cnpj="11222333000181", empresa="EMPRESA FICTICIA",
+                                certificado="Save", assunto="Outra", isn="902")
+    wb = load_workbook(planilha)
+    assert wb.sheetnames[0] == "pis cofins "                   # a 1ª aba continua a 1ª
+    linhas = list(wb[ABA_MENSAGENS_ABERTAS].iter_rows(values_only=True))
+    assert linhas[0] == reg.CABECALHO_MENSAGENS
+    assert [(l[0], l[1], l[2], l[3], l[5]) for l in linhas[1:]] == [
+        ("11222333000181", "EMPRESA FICTICIA", "Save", "Intimação fiscal", "901"),
+        ("11222333000181", "EMPRESA FICTICIA", "Save", "Outra", "902")]
+    assert wb["outra"]["A1"].value == "intocada"
+
+
+def test_mensagem_so_no_diario_entra_na_aba_na_proxima_execucao(tmp_path, planilha):
+    from VerificacaoPagamento.config import ABA_MENSAGENS_ABERTAS
+
+    anterior = reg.RegistroResultados(planilha, tmp_path / "resultados", tmp_path / "backups",
+                                      sessao=2)
+    anterior.salvar = lambda: False                            # a planilha não pôde ser gravada
+    anterior.registrar_mensagem(cnpj="11222333000181", empresa="E", certificado="Save",
+                                assunto="Aviso", isn="77")
+    novo = reg.RegistroResultados(planilha, tmp_path / "resultados", tmp_path / "backups")
+    assert novo.reconciliar_mensagens() == 1
+    assert novo.salvar()
+    linhas = list(load_workbook(planilha)[ABA_MENSAGENS_ABERTAS].iter_rows(values_only=True))
+    assert [l[5] for l in linhas[1:]] == ["77"]
+    assert novo.reconciliar_mensagens() == 0                    # já está na aba
+
+
+def test_marca_de_mensagens_importantes_nao_tira_a_linha_do_lote(registro, planilha):
+    from VerificacaoPagamento.config import SITUACAO_MENSAGENS_IMPORTANTES
+
+    dados = ler_planilha(planilha)
+    registro.registrar(dados.linhas[0], SITUACAO_MENSAGENS_IMPORTANTES, "aviso")
+    dados = ler_planilha(planilha)
+    assert dados.linhas[0].situacao_verificacao == SITUACAO_MENSAGENS_IMPORTANTES
+    assert dados.linhas[0].pendente
+    # e a reconciliação não a "repõe" nem espalha para outras linhas
+    assert registro.reconciliar(dados) == 0
+
+
 def test_registrar_grava_a_aa_com_copia_de_seguranca(registro, planilha, tmp_path):
     dados = ler_planilha(planilha)
     registro.registrar(dados.linhas[1], SITUACAO_PAGAMENTO_REALIZADO, "ok")
