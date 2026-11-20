@@ -55,6 +55,9 @@ MARCA_ENVIANDO = "__ENVIANDO__"
 MARCA_NAO_TRANSMITIDO = "__NAO_TRANSMITIDO__"
 # Coluna K corrigida (o tributo da planilha estava trocado): não é desfecho.
 MARCA_TRIBUTO = "__TRIBUTO_CORRIGIDO__"
+# Correção manual: o desfecho anterior da linha estava errado (ex.: "não apto"
+# falso, 20/11/2026) — a linha volta a ser pendente e é refeita.
+MARCA_ANULADO = "__ANULADO__"
 CABECALHO_SITUACAO = "Situação da Verificação"
 CABECALHO_NUMERO = "DCOMP protocolada"
 CAMPOS = ("data_hora", "linha", "perdcomp", "cnpj", "situacao", "detalhe")
@@ -102,6 +105,8 @@ def _ler_diario(arquivo: Path, *, envios_em_andamento_desde: datetime | None = N
                 finais[chave] = SITUACAO_VERIFICAR
             elif situacao == MARCA_TRIBUTO:
                 continue
+            elif situacao == MARCA_ANULADO:
+                finais.pop(chave, None)
             elif situacao == MARCA_NAO_TRANSMITIDO:
                 if finais.get(chave) == SITUACAO_VERIFICAR:
                     finais.pop(chave)
@@ -346,6 +351,11 @@ class RegistroResultados:
     def marcar_nao_transmitido(self, linha: LinhaPerdcomp, detalhe: str = "") -> None:
         """O servidor recusou o envio: a tentativa não conta (a linha é refeita)."""
         self._anotar(linha, MARCA_NAO_TRANSMITIDO, detalhe)
+
+    def anular(self, linha: LinhaPerdcomp, detalhe: str = "") -> None:
+        """Correção manual: o desfecho anterior desta linha não vale (ela volta
+        a ser pendente se a AA for limpa)."""
+        self._anotar(linha, MARCA_ANULADO, detalhe)
 
     def registrar(self, linha: LinhaPerdcomp, situacao: str, detalhe: str = "") -> None:
         self._anotar(linha, situacao, detalhe)

@@ -165,6 +165,21 @@ def test_envio_recusado_pelo_servidor_anula_o_enviando(registro, planilha):
     assert registro.ler_diario() == {(2, P1): SITUACAO_VERIFICAR}
 
 
+def test_desfecho_anulado_volta_para_a_fila_e_nao_e_reposto(registro, planilha):
+    from VerificacaoPagamento.config import SITUACAO_NAO_APTO
+
+    dados = ler_planilha(planilha)
+    registro.registrar(dados.linhas[0], SITUACAO_NAO_APTO, "falso")
+    registro.anular(dados.linhas[0], "nao apto falso")
+    assert registro.ler_diario() == {}
+    wb = load_workbook(planilha)
+    wb.worksheets[0]["AA2"] = None                              # AA limpa à mão
+    wb.save(planilha)
+    dados = ler_planilha(planilha)
+    assert registro.reconciliar(dados) == 0
+    assert [ln.perdcomp for ln in dados.pendentes] == [P1, P2, P3]
+
+
 def test_corrigir_tributo_grava_a_coluna_k_junto(registro, planilha):
     dados = ler_planilha(planilha)
     registro.corrigir_tributo(dados.linhas[0], "COFINS")
