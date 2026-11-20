@@ -154,6 +154,20 @@ def _cortar(grupos: list[GrupoCertificado], limite_empresas: int | None,
     return cortados
 
 
+def _prioritarias_primeiro(prioritarios: list[GrupoCertificado],
+                           demais: list[GrupoCertificado]) -> list[GrupoCertificado]:
+    """Todas as empresas prioritárias antes das outras. O certificado em que as
+    prioritárias terminam emenda nas outras empresas dele (sem login a mais)."""
+    if prioritarios and demais:
+        ultimo = prioritarios[-1].certificado
+        for i, grupo in enumerate(demais):
+            if grupo.certificado == ultimo:
+                prioritarios[-1].empresas.extend(grupo.empresas)
+                demais = [grupo for j, grupo in enumerate(demais) if j != i]
+                break
+    return prioritarios + demais
+
+
 def preparar_lote(dados: DadosPlanilha, limite: int | None, pfx_disponiveis: dict[str, Path],
                   senhas: dict[str, str], *, limite_empresas: int | None = None,
                   somente_certificado: str | None = None,
@@ -162,10 +176,11 @@ def preparar_lote(dados: DadosPlanilha, limite: int | None, pfx_disponiveis: dic
                   procuradores_ignorados=PROCURADORES_IGNORADOS) -> Lote:
     """Escolhe as linhas, resolve os certificados e agrupa — tudo ANTES do login.
 
-    PRIORIDADE POR EMPRESA (regra do usuário, 18/11/2026): entra a empresa
-    (CNPJ) que tiver PELO MENOS UMA linha com status `status_prioridade` na
-    coluna Z — e entra INTEIRA, com todas as linhas pendentes dela, qualquer
-    que seja o status delas. Tupla vazia = todas as empresas.
+    PRIORIDADE POR EMPRESA (regra do usuário, 18/11/2026): a empresa (CNPJ)
+    que tiver PELO MENOS UMA linha com status `status_prioridade` na coluna Z
+    é prioritária — INTEIRA, com todas as linhas pendentes dela. Desde
+    20/11/2026 as outras empresas também entram, DEPOIS de todas as
+    prioritárias. Tupla vazia = sem prioridade (ordem da planilha).
 
     Depois, por linha: procurador ignorado (ELIANE), CNPJ, tributo (só
     PIS/COFINS por enquanto), nº do PER/DCOMP (24 dígitos), certificado.
@@ -197,8 +212,6 @@ def preparar_lote(dados: DadosPlanilha, limite: int | None, pfx_disponiveis: dic
             qtd_ignorados += 1
         elif not linha.cnpj:
             cnpj_invalido.append(linha.numero_linha)
-        elif prioritarias is not None and linha.cnpj not in prioritarias:
-            fora_status += 1
         elif not linha.tipo_tributo:
             tributo_fora[linha.tributo.strip() or "(vazio)"] += 1
         elif len(linha.perdcomp) != 24 or not linha.perdcomp.isdigit():
@@ -213,11 +226,13 @@ def preparar_lote(dados: DadosPlanilha, limite: int | None, pfx_disponiveis: dic
         else:
             vistos.add(linha.perdcomp)
             candidatas.append(linha)
+            if prioritarias is not None and linha.cnpj not in prioritarias:
+                fora_status += 1
 
     if prioritarias is not None:
         informacoes.append(f"{len(prioritarias)} empresa(s) com pelo menos uma linha "
-                           f"'{' / '.join(status_prioridade)}' (coluna Z) entram inteiras; "
-                           f"{fora_status} linha(s) de outras empresas ficaram de fora.")
+                           f"'{' / '.join(status_prioridade)}' (coluna Z) vêm primeiro, inteiras; "
+                           f"{fora_status} linha(s) de outras empresas vêm depois delas.")
     if repetidos:
         informacoes.append(f"{repetidos} linha(s) repetem o PER/DCOMP de outra linha: não vão ao "
                            "e-CAC e recebem o resultado da primeira.")
@@ -295,7 +310,13 @@ def preparar_lote(dados: DadosPlanilha, limite: int | None, pfx_disponiveis: dic
         fora = sum(1 for _, nome in linhas_ok if not _desta_sessao(nome))
         linhas_ok = [(ln, nome) for ln, nome in linhas_ok if _desta_sessao(nome)]
         informacoes.append(f"{fora} linha(s) de certificados de outra sessão ficam fora deste lote.")
-    grupos = _cortar(planejar_lote(linhas_ok), limite_empresas, limite)
+    if prioritarias is None:
+        grupos = planejar_lote(linhas_ok)
+    else:
+        grupos = _prioritarias_primeiro(
+            planejar_lote([par for par in linhas_ok if par[0].cnpj in prioritarias]),
+            planejar_lote([par for par in linhas_ok if par[0].cnpj not in prioritarias]))
+    grupos = _cortar(grupos, limite_empresas, limite)
     usados = {g.certificado for g in grupos}
     return Lote(
         grupos=grupos,

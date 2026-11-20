@@ -392,6 +392,29 @@ def test_parada_do_operador_sai_com_seguranca_e_guarda_o_parcial():
 
 # ── preparar_lote ────────────────────────────────────────────────────────────
 
+def test_empresas_prioritarias_vem_antes_de_todas_as_outras(tmp_path):
+    from tests.test_certificados import _pfx
+    from VerificacaoPagamento.certificados import ler_senhas, listar_pfx
+
+    for nome in ("Save Inteligência", "D&S"):
+        _pfx(tmp_path / f"{nome}.pfx", "s")
+    (tmp_path / "senhas.json").write_text(json.dumps({"Save Inteligência.pfx": "s", "D&S.pfx": "s"}),
+                                          encoding="utf-8")
+    outra_a, outra_b = "44444444000144", "55555555000155"
+    linhas = [
+        _linha(2, outra_a, "SAVE", status="Em análise"),       # Save, não prioritária
+        _linha(3, CNPJ_A, "SAVE"),                              # Save, prioritária
+        _linha(4, outra_b, "D&S", status="Em análise"),        # D&S, não prioritária
+        _linha(5, CNPJ_B, "D&S"),                               # D&S, prioritária
+    ]
+    dados = DadosPlanilha(caminho="x.xlsx", nome_aba="a", linhas=linhas, tem_coluna_situacao=True)
+    lote = preparar_lote(dados, None, listar_pfx(tmp_path), ler_senhas(tmp_path / "senhas.json"))
+    ordem = [(g.certificado, ln.numero_linha) for g in lote.grupos for e in g.empresas
+             for ln in e.linhas]
+    assert [n for _, n in ordem] == [3, 5, 4, 2]
+    assert [g.certificado for g in lote.grupos] == ["Save Inteligência", "D&S", "Save Inteligência"]
+
+
 def test_preparar_lote_filtra_e_agrega_os_problemas(tmp_path):
     from tests.test_certificados import _pfx
 
@@ -404,7 +427,7 @@ def test_preparar_lote_filtra_e_agrega_os_problemas(tmp_path):
     linhas = [
         _linha(2, CNPJ_A, "Save Inteligencia"),                   # entra
         _linha(3, CNPJ_A, "SAVE", status="Em análise"),           # entra: a empresa é prioritária
-        _linha(12, "44444444000144", "SAVE", status="Em análise"),  # fora: empresa sem 'Análise concluída'
+        _linha(12, "44444444000144", "SAVE", status="Em análise"),  # entra DEPOIS: sem 'Análise concluída'
         _linha(4, CNPJ_B, "ELIANE"),                              # ignorado — só log
         _linha(5, CNPJ_B, "MARIA"),                               # sem certificado
         _linha(6, "", "SAVE"),                                    # CNPJ inválido
@@ -417,7 +440,8 @@ def test_preparar_lote_filtra_e_agrega_os_problemas(tmp_path):
     dados = DadosPlanilha(caminho="x.xlsx", nome_aba="a", linhas=linhas, tem_coluna_situacao=True)
     lote = preparar_lote(dados, None, listar_pfx(tmp_path), ler_senhas(tmp_path / "senhas.json"))
 
-    assert [ln.numero_linha for g in lote.grupos for e in g.empresas for ln in e.linhas] == [2, 3, 11]
+    assert [ln.numero_linha for g in lote.grupos for e in g.empresas for ln in e.linhas] == [2, 3, 11, 12]
+    assert len(lote.grupos) == 1                      # mesmo certificado: um login só
     texto = " | ".join(lote.avisos)
     assert "ELIANE" not in texto and "Em análise" not in texto
     assert "procurador 'MARIA'" in texto
@@ -426,7 +450,7 @@ def test_preparar_lote_filtra_e_agrega_os_problemas(tmp_path):
     assert "24 dígitos" in texto
     assert "certificado 'D&S'" in texto and "não abre" in texto
     infos = " | ".join(lote.informacoes)
-    assert "1 linha(s) de outras empresas ficaram de fora" in infos
+    assert "1 linha(s) de outras empresas vêm depois delas" in infos
     assert "1 linha(s) de procurador ignorado" in infos
 
 
