@@ -118,6 +118,11 @@ SITUACAO_PERDCOMP_CANCELADO = "Perdcomp cancelado"
 # com certificado digital" = a procuração não dá poder para o PER/DCOMP (regra
 # do usuário, 19/11/2026): grava isto na AA das linhas da empresa e segue.
 SITUACAO_SEM_PERMISSAO = "Procuração sem poder para PER/DCOMP"
+# "Excedido o número de rascunhos permitidos pelo sistema" (20/11/2026): a
+# empresa não cria documento novo até alguém excluir rascunhos no PER/DCOMP —
+# refazer não adianta. Vai para a AA das linhas da empresa e segue.
+TEXTO_LIMITE_RASCUNHOS = "excedido o número de rascunhos"
+SITUACAO_LIMITE_RASCUNHOS = "Limite de rascunhos excedido no PER/DCOMP (excluir rascunhos)"
 # "Enviar" clicado sem desfecho confirmado: NÃO se sabe se a Declaração foi
 # transmitida. A linha fica fora de todas as execuções até alguém conferir no
 # e-CAC — reenviar poderia gerar uma segunda Declaração de Compensação.

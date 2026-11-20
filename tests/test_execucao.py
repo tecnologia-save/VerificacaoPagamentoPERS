@@ -293,6 +293,30 @@ def test_rede_na_troca_de_perfil_reabre_o_navegador_e_nao_descarta_a_empresa():
     assert portal.esperas == 1
 
 
+def test_limite_de_rascunhos_marca_a_empresa_e_segue_sem_retentativas():
+    from VerificacaoPagamento.config import SITUACAO_LIMITE_RASCUNHOS
+    from VerificacaoPagamento.formulario_perdcomp import ProsseguirNaoAvancou
+
+    lote = _lote([(_linha(2, CNPJ_A), "Save"), (_linha(3, CNPJ_A), "Save"),
+                  (_linha(4, CNPJ_B), "Save")])
+
+    class Portal(PortalFalso):
+        def processar_linha(self, sessao, linha, **kw):
+            if sessao.perfil_real == CNPJ_A:
+                self.eventos.append(("linha", linha.numero_linha, sessao.perfil_real))
+                raise ProsseguirNaoAvancou("a tela nao avancou: Excedido o número de rascunhos "
+                                           "permitidos pelo sistema.")
+            return super().processar_linha(sessao, linha, **kw)
+
+    portal = Portal()
+    registro = RegistroFalso()
+    resultados = _resultado(executar(lote, portal, registro=registro))
+    assert (SITUACAO_LIMITE_RASCUNHOS, 2) in registro.anotacoes
+    assert (SITUACAO_LIMITE_RASCUNHOS, 3) in registro.anotacoes
+    assert all(resultados[n][0] for n in (2, 3, 4))
+    assert portal.tipos("linha") == [(2, CNPJ_A), (4, CNPJ_B)]   # uma vez só, sem retentativas
+
+
 def test_troca_que_nao_trocou_faz_login_novo_e_nunca_preenche_no_cnpj_errado():
     """O popup apareceu DEPOIS da conferência na entrada (não detectado): a
     troca do ecac_login 'dá certo' sem trocar. A conferência do perfil pega."""

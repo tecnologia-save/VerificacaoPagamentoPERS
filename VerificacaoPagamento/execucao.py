@@ -37,7 +37,9 @@ from .certificados import (
 from .config import (
     CODIGOS_CREDITO_ATENDIDOS,
     SITUACAO_MENSAGENS_IMPORTANTES,
+    SITUACAO_LIMITE_RASCUNHOS,
     SITUACAO_SEM_PERMISSAO,
+    TEXTO_LIMITE_RASCUNHOS,
     MAX_ENVIOS_SEM_CONFIRMACAO,
     PROCURADORES_IGNORADOS,
     SITUACAO_VERIFICAR,
@@ -365,6 +367,19 @@ def executar(lote: Lote, portal, *, checkpoint=None, registro=None,
             posicao += 1
             resultados.append(ResultadoLinha(linha.numero_linha, linha.rotulo, False, detalhe))
 
+    def _encerrar_empresa(empresa, indice_linha: int, linha: LinhaPerdcomp, posicao: int,
+                          situacao: str, motivo: str) -> int:
+        """`situacao` na AA desta linha e das seguintes da empresa (que fica
+        para trás). Devolve a posição atualizada."""
+        print(f"  -> [{situacao.upper()}] {empresa.empresa.strip() or empresa.cnpj}: "
+              f"{motivo[:160]}. Linhas da empresa marcadas; proxima empresa.")
+        for outra in empresa.linhas[indice_linha:]:
+            _registrar(outra, situacao, motivo)
+            if outra is not linha:
+                posicao += 1
+            resultados.append(ResultadoLinha(outra.numero_linha, outra.rotulo, True, situacao))
+        return posicao
+
     def _largar_sessao(*, morta: bool = False) -> None:
         nonlocal sessao
         if sessao is not None:
@@ -608,14 +623,8 @@ def executar(lote: Lote, portal, *, checkpoint=None, registro=None,
                             # Regra do usuário (19/11/2026): a procuração não dá poder
                             # para o PER/DCOMP -> AA de todas as linhas da empresa e
                             # próxima empresa.
-                            print(f"  -> [SEM PERMISSAO] {empresa.empresa.strip() or empresa.cnpj}: {e}. "
-                                  "Linhas da empresa marcadas; proxima empresa.")
-                            for outra in empresa.linhas[indice_linha:]:
-                                _registrar(outra, SITUACAO_SEM_PERMISSAO, str(e))
-                                if outra is not linha:
-                                    posicao += 1
-                                resultados.append(ResultadoLinha(outra.numero_linha, outra.rotulo,
-                                                                 True, SITUACAO_SEM_PERMISSAO))
+                            posicao = _encerrar_empresa(empresa, indice_linha, linha, posicao,
+                                                        SITUACAO_SEM_PERMISSAO, str(e))
                             modulo_aberto = False
                             sem_permissao = True
                         except EmpresaBloqueadaNaCaixaPostal as e:
@@ -643,6 +652,13 @@ def executar(lote: Lote, portal, *, checkpoint=None, registro=None,
                                     "execução — parada por segurança. Confira essas linhas no e-CAC."
                                 ) from None
                         except Exception as e:  # noqa: BLE001 — falha só desta linha
+                            if TEXTO_LIMITE_RASCUNHOS in " ".join(str(e).split()).casefold():
+                                portal.capturar(sessao, f"limite_rascunhos_{linha.numero_linha}")
+                                posicao = _encerrar_empresa(empresa, indice_linha, linha, posicao,
+                                                            SITUACAO_LIMITE_RASCUNHOS, str(e))
+                                modulo_aberto = False
+                                sem_permissao = True
+                                break
                             if isinstance(e, EnvioRecusadoPeloServidor) and registro is not None:
                                 # Não transmitiu: anula o "enviando" do diário e refaz.
                                 registro.marcar_nao_transmitido(linha, str(e))
