@@ -248,8 +248,9 @@ def preparar_lote(dados: DadosPlanilha, limite: int | None, pfx_disponiveis: dic
                       f"puladas (linhas {_exemplos(cnpj_invalido)}).")
     if tributo_fora:
         valores = ", ".join(f"'{v}' ({q})" for v, q in tributo_fora.most_common(6))
-        avisos.append(f"{sum(tributo_fora.values())} linha(s) com a coluna K vazia ou com PIS e "
-                      f"COFINS juntos (tipo de crédito indefinido) foram puladas: {valores}.")
+        avisos.append(f"{sum(tributo_fora.values())} linha(s) com tributo fora de PIS/COFINS na "
+                      f"coluna K (Pagamento Indevido ainda não automatizado; ou K vazia, ou PIS e "
+                      f"COFINS juntos) foram puladas: {valores}.")
     if credito_fora:
         valores = ", ".join(f"'{c}' ({q})" for c, q in credito_fora.most_common(6))
         avisos.append(f"{sum(credito_fora.values())} linha(s) com PER/DCOMP de outro tipo de "

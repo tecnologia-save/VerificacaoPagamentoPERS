@@ -473,7 +473,7 @@ def test_preparar_lote_filtra_e_agrega_os_problemas(tmp_path, monkeypatch):
     assert "ELIANE" not in texto and "Em análise" not in texto
     assert "procurador 'MARIA'" in texto
     assert "CNPJ inválido" in texto
-    assert "PIS e COFINS juntos" in texto and "'(vazio)'" in texto and "'PIS/COFINS'" in texto
+    assert "tributo fora de PIS/COFINS" in texto and "'(vazio)'" in texto and "'PIS/COFINS'" in texto
     assert "24 dígitos" in texto
     assert "certificado 'D&S'" in texto and "não abre" in texto
     infos = " | ".join(lote.informacoes)
