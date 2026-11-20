@@ -57,16 +57,21 @@ APELIDOS_CERTIFICADO = {
     "SERGIO": "Sergio",
     "G S H": "GSH",
     "GHS": "GSH",
+    "Save Inteligencia": "Save Inteligência",
+    "RECUPERA-C": "Recupera-C",
+    "MORASTONI": "Morastoni",
+    "SAVE SOLUCOES EM TECNOLOGIA E INFORMACAO LTDA": "Save Inteligência",
+
 }
 
 # Procuradores cujo certificado não é mais usado: as linhas deles ficam fora
 # do lote em silêncio (só uma linha no log) — pedido do usuário, 18/11/2026.
 # Tipo de crédito, pelo NÚMERO do PER/DCOMP (dígitos 19-20; no número formatado,
 # o "19" de 05507.32579.220926.1.1.19-0646): 18/19 = ressarcimento de PIS/COFINS
-# não-cumulativo — o único fluxo que a automação preenche. O resto (ex.: "04",
-# restituição de pagamento indevido ou a maior, linha 537 de 18/11/2026) é
-# recusado pela Receita nos dois tipos: fica fora do lote, com a AA vazia.
-CODIGOS_CREDITO_ATENDIDOS = ("18", "19")
+# não-cumulativo; "04" = restituição de pagamento indevido ou a maior — desde
+# 20/11/2026 preenchido como "Pagamento Indevido ou a Maior" (planilha.tipo_credito).
+# Outros códigos ficam fora do lote, com a AA vazia.
+CODIGOS_CREDITO_ATENDIDOS = ("18", "19", "04")
 
 PROCURADORES_IGNORADOS = ("ELIANE",)
 

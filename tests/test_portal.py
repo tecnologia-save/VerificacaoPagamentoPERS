@@ -127,3 +127,22 @@ def test_erro_comum_sem_aviso_continua_erro_comum(cenario, monkeypatch):
     monkeypatch.setattr(mod, "concluir_declaracao", concluir_com_erro)
     with pytest.raises(RuntimeError, match="tela inesperada"):
         portal.processar_linha(sessao, _linha("PIS"))
+
+
+def test_pagamento_indevido_seleciona_o_tipo_e_recusado_vai_direto_para_a_aa(cenario):
+    """Regra de 20/11/2026: código 04 / coluna K sem PIS nem COFINS -> "Pagamento
+    Indevido ou a Maior"; se a Receita recusar, não há troca a tentar."""
+    portal, sessao, eventos, recusados = cenario
+    linha = LinhaPerdcomp(numero_linha=7, cnpj=CNPJ, tributo="INSS",
+                          perdcomp="1" * 18 + "04" + "0" * 4)
+    desfecho = portal.processar_linha(sessao, linha)
+    assert desfecho.situacao == SITUACAO_PAGAMENTO_REALIZADO
+    assert not desfecho.tributo_corrigido
+    assert [e for e in eventos if e[0] == "preencher"] == [("preencher", "PAGAMENTO INDEVIDO")]
+
+    eventos.clear()
+    recusados.add("PAGAMENTO INDEVIDO")
+    desfecho = portal.processar_linha(sessao, linha)
+    assert desfecho.situacao == SITUACAO_TIPO_CREDITO_DIVERGENTE
+    assert desfecho.tela_conhecida is False
+    assert [e for e in eventos if e[0] == "preencher"] == [("preencher", "PAGAMENTO INDEVIDO")]

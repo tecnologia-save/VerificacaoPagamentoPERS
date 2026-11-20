@@ -261,6 +261,7 @@ def test_sem_a_opcao_na_tela_levanta(abrir, rapido):
 @pytest.mark.parametrize(("tributo", "texto"), [
     ("PIS", "PIS/PASEP Não-Cumulativo - Ressarcimento/Compensação - PA a partir de Janeiro de 2014"),
     ("COFINS", "Cofins Não-Cumulativa - Ressarcimento/Compensação - PA a partir de Janeiro de 2014"),
+    ("PAGAMENTO INDEVIDO", "Pagamento Indevido ou a Maior"),     # código 04 / INSS... (20/11/2026)
 ])
 def test_preenche_a_identificacao_e_prossegue(abrir, tributo, texto):
     page = abrir()

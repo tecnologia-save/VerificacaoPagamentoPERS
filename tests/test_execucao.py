@@ -455,7 +455,8 @@ def test_preparar_lote_filtra_e_agrega_os_problemas(tmp_path):
         _linha(4, CNPJ_B, "ELIANE"),                              # ignorado — só log
         _linha(5, CNPJ_B, "MARIA"),                               # sem certificado
         _linha(6, "", "SAVE"),                                    # CNPJ inválido
-        _linha(7, CNPJ_C, "SAVE", tributo="2024"),                # tributo fora
+        _linha(7, CNPJ_C, "SAVE", tributo="INSS"),                # entra: Pagamento Indevido
+        _linha(13, CNPJ_C, "SAVE", tributo=""),                   # coluna K vazia
         _linha(8, CNPJ_C, "SAVE", tributo="PIS/COFINS"),          # tributo ambíguo
         _linha(9, CNPJ_C, "SAVE", perdcomp="123"),                # PER/DCOMP inválido
         _linha(10, CNPJ_C, "D&S"),                                # senha errada
@@ -464,13 +465,13 @@ def test_preparar_lote_filtra_e_agrega_os_problemas(tmp_path):
     dados = DadosPlanilha(caminho="x.xlsx", nome_aba="a", linhas=linhas, tem_coluna_situacao=True)
     lote = preparar_lote(dados, None, listar_pfx(tmp_path), ler_senhas(tmp_path / "senhas.json"))
 
-    assert [ln.numero_linha for g in lote.grupos for e in g.empresas for ln in e.linhas] == [2, 3, 11, 12]
+    assert [ln.numero_linha for g in lote.grupos for e in g.empresas for ln in e.linhas] == [2, 3, 7, 11, 12]
     assert len(lote.grupos) == 1                      # mesmo certificado: um login só
     texto = " | ".join(lote.avisos)
     assert "ELIANE" not in texto and "Em análise" not in texto
     assert "procurador 'MARIA'" in texto
     assert "CNPJ inválido" in texto
-    assert "tributo fora de PIS/COFINS" in texto and "'2024'" in texto and "'PIS/COFINS'" in texto
+    assert "PIS e COFINS juntos" in texto and "'(vazio)'" in texto and "'PIS/COFINS'" in texto
     assert "24 dígitos" in texto
     assert "certificado 'D&S'" in texto and "não abre" in texto
     infos = " | ".join(lote.informacoes)
@@ -714,21 +715,22 @@ def test_duas_sessoes_divididas_por_certificado_sem_perdcomp_nas_duas(monkeypatc
     assert _linhas(errado) == [] and errado.avisos
 
 
-def test_restituicao_fica_fora_do_lote_pelo_numero_do_perdcomp(monkeypatch):
-    """Linha 537 (18/11/2026): PER/DCOMP 05507.32579.220926.1.2.04-0646 é de
-    restituição (crédito 04) — a Receita recusa PIS e COFINS. Só entram os
-    créditos 18/19 (ressarcimento PIS/COFINS), qualquer que seja a coluna H."""
+def test_restituicao_04_entra_e_outros_codigos_ficam_fora_do_lote(monkeypatch):
+    """PER/DCOMP de restituição (crédito 04): desde 20/11/2026 entra, como
+    "Pagamento Indevido ou a Maior". Outros códigos continuam fora."""
     from VerificacaoPagamento import execucao
 
     monkeypatch.setattr(execucao, "carregar_certificado",
                         lambda caminho, senhas: Certificado(caminho.stem, caminho, "x"))
-    linhas = [_linha(2, CNPJ_A, perdcomp="055073257922092612040646"),   # restituição: fora
+    linhas = [_linha(2, CNPJ_A, perdcomp="055073257922092612040646"),   # restituição: entra
               _linha(3, CNPJ_A, perdcomp=_p(3, "18")),
               _linha(4, CNPJ_A, perdcomp=_p(4, "19")),
-              _linha(5, CNPJ_A, perdcomp=_p(5, "04"))]
+              _linha(5, CNPJ_A, perdcomp=_p(5, "01")),                 # outro código: fora
+              _linha(6, CNPJ_A, perdcomp=_p(6, "02"))]
     dados = DadosPlanilha(caminho="x.xlsx", nome_aba="a", linhas=linhas, tem_coluna_situacao=True)
     lote = preparar_lote(dados, None, {"save inteligencia": Path("Save Inteligência.pfx")}, {})
-    assert [ln.numero_linha for g in lote.grupos for e in g.empresas for ln in e.linhas] == [3, 4]
+    assert [ln.numero_linha for g in lote.grupos for e in g.empresas for ln in e.linhas] == [2, 3, 4]
+    assert lote.grupos[0].empresas[0].linhas[0].tipo_credito == "PAGAMENTO INDEVIDO"
     assert any("2 linha(s) com PER/DCOMP de outro tipo de crédito" in a for a in lote.avisos)
 
 

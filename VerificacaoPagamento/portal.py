@@ -31,7 +31,7 @@ from .formulario_perdcomp import (
     preencher_identificacao,
 )
 from .navegacao import navegar_modulo_perdcomp
-from .planilha import TRIBUTO_COFINS, TRIBUTO_PIS, LinhaPerdcomp
+from .planilha import TRIBUTO_COFINS, TRIBUTO_PAGAMENTO_INDEVIDO, TRIBUTO_PIS, LinhaPerdcomp
 
 # Pausa depois que a sonda diz que o e-CAC voltou, antes de refazer a linha.
 ESPERA_ERRO_REDE_S = 30
@@ -154,7 +154,7 @@ class PortalReal:
         if not lido:
             print("  -> [AVISO] Perfil ativo nao lido na pagina (conferido na entrada da empresa).")
 
-        tributo = linha.tipo_tributo
+        tributo = linha.tipo_credito
         for tentativa in (1, 2):
             if tentativa == 2:
                 # A Receita disse que o tipo de crédito é o outro: refaz do zero
@@ -186,6 +186,14 @@ class PortalReal:
                                       "encontra-se cancelado.",
                                 situacao=SITUACAO_PERDCOMP_CANCELADO, tela_conhecida=False)
             except TipoCreditoDivergente:
+                if tributo == TRIBUTO_PAGAMENTO_INDEVIDO:
+                    # Não há "outro" para tentar (a troca é só PIS <-> COFINS).
+                    print(f"  -> [TRIBUTO] Tipo de credito 'Pagamento Indevido ou a Maior' recusado: "
+                          f"linha {linha.numero_linha} vai para a AA e a execucao segue.")
+                    return Desfecho(True, f"{SITUACAO_TIPO_CREDITO_DIVERGENTE} (recusado como "
+                                          "Pagamento Indevido ou a Maior)",
+                                    situacao=SITUACAO_TIPO_CREDITO_DIVERGENTE,
+                                    tela_conhecida=False)
                 if tentativa == 2:
                     # Recusado com os DOIS tributos: é o resultado da linha (AA) —
                     # o navegador continua aberto; a próxima linha recarrega o módulo.
@@ -199,7 +207,7 @@ class PortalReal:
                 print(f"  -> [TRIBUTO] A Receita indicou outro tipo de credito: refazendo a linha "
                       f"{linha.numero_linha} como {tributo} (coluna K diz {linha.tributo!r}).")
                 continue
-            if tributo != linha.tipo_tributo:
+            if tributo != linha.tipo_credito:
                 desfecho.tributo_corrigido = tributo
             return desfecho
         raise AssertionError("inalcancavel")

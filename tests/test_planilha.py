@@ -143,3 +143,21 @@ def test_status_z_permitido():
     assert status_z_permitido(" ANALISE CONCLUIDA ", ("Análise concluída",))
     assert not status_z_permitido("Em análise", ("Análise concluída",))
     assert status_z_permitido("qualquer", ())
+
+
+@pytest.mark.parametrize("tributo, codigo, esperado", [
+    ("PIS", "19", "PIS"),
+    ("Cofins", "18", "COFINS"),
+    ("PIS", "04", "PAGAMENTO INDEVIDO"),         # código 04 manda, seja qual for a coluna K
+    ("PIS/COFINS", "04", "PAGAMENTO INDEVIDO"),
+    ("", "04", "PAGAMENTO INDEVIDO"),
+    ("INSS", "19", "PAGAMENTO INDEVIDO"),        # sem PIS nem COFINS (20/11/2026)
+    ("IRPJ", "18", "PAGAMENTO INDEVIDO"),
+    ("CSLL", "04", "PAGAMENTO INDEVIDO"),
+    ("IPI", "19", "PAGAMENTO INDEVIDO"),
+    ("PIS/COFINS", "19", ""),                    # os dois juntos: indefinido
+    ("", "19", ""),                              # coluna K vazia: indefinido
+])
+def test_tipo_credito(tributo, codigo, esperado):
+    from VerificacaoPagamento.planilha import tipo_credito
+    assert tipo_credito(tributo, "1" * 18 + codigo + "0" * 4) == esperado

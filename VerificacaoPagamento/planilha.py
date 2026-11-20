@@ -124,6 +124,32 @@ def tipo_tributo(valor) -> str:
     return ""
 
 
+# Tipo de crédito "Pagamento Indevido ou a Maior" (regra do usuário, 20/11/2026):
+# PER/DCOMP de código 04 (restituição de pagamento indevido) e toda linha cuja
+# coluna K não cita PIS nem COFINS (INSS, IRPJ, CSLL, IPI...).
+TRIBUTO_PAGAMENTO_INDEVIDO = "PAGAMENTO INDEVIDO"
+CODIGO_PAGAMENTO_INDEVIDO = "04"
+
+
+def tipo_credito(tributo, perdcomp: str) -> str:
+    """Opção do 1º dropdown (Tipo de Crédito): "PIS", "COFINS",
+    "PAGAMENTO INDEVIDO" ou "" (fora do escopo).
+
+    - código 04 no nº do PER/DCOMP -> PAGAMENTO INDEVIDO, seja qual for a coluna K;
+    - coluna K só com PIS ou só com COFINS -> esse tributo;
+    - coluna K com PIS e COFINS juntos ('PIS/COFINS') ou vazia -> "" (indefinido);
+    - qualquer outro texto (INSS, IRPJ, CSLL, IPI...) -> PAGAMENTO INDEVIDO."""
+    if codigo_credito(perdcomp) == CODIGO_PAGAMENTO_INDEVIDO:
+        return TRIBUTO_PAGAMENTO_INDEVIDO
+    tributo_k = tipo_tributo(tributo)
+    if tributo_k:
+        return tributo_k
+    palavras = set(normalizar_texto(tributo).split())
+    if not palavras or "pis" in palavras or "cofins" in palavras:
+        return ""
+    return TRIBUTO_PAGAMENTO_INDEVIDO
+
+
 def status_z_permitido(status, permitidos) -> bool:
     """O status da Receita (coluna Z) está entre os que entram no lote?
     `permitidos` vazio = todos."""
@@ -178,6 +204,10 @@ class LinhaPerdcomp:
     @property
     def tipo_tributo(self) -> str:
         return tipo_tributo(self.tributo)
+
+    @property
+    def tipo_credito(self) -> str:
+        return tipo_credito(self.tributo, self.perdcomp)
 
     @property
     def pendente(self) -> bool:

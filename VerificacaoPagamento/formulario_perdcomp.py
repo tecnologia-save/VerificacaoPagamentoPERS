@@ -552,6 +552,8 @@ SELETOR_PERDCOMP_ANTERIOR = f"input[placeholder='{MASCARA_PERDCOMP}']"
 TEXTO_TIPO_CREDITO = {
     "PIS": "PIS/PASEP Não-Cumulativo - Ressarcimento/Compensação - PA a partir de Janeiro de 2014",
     "COFINS": "Cofins Não-Cumulativa - Ressarcimento/Compensação - PA a partir de Janeiro de 2014",
+    # código 04 e coluna K sem PIS nem COFINS (INSS, IRPJ...): regra de 20/11/2026
+    "PAGAMENTO INDEVIDO": "Pagamento Indevido ou a Maior",
 }
 TEXTO_QUALIFICACAO = "Outra Qualificação"
 TEXTO_DETALHAMENTO = "O crédito já foi detalhado em PER/DCOMP anterior"
@@ -1113,7 +1115,8 @@ def preencher_identificacao(page, *, tributo: str, perdcomp: str, timeout: int =
                             diagnostico=None) -> None:
     """Do "Novo Documento" até o número do PER/DCOMP anterior preenchido (passos
     enviados pelo usuário em 18/11/2026). O "Prosseguir" desta tela fica com
-    `etapas_dcomp`, que sabe o que vem depois. `tributo`: "PIS" ou "COFINS";
+    `etapas_dcomp`, que sabe o que vem depois. `tributo`: "PIS", "COFINS" ou
+    "PAGAMENTO INDEVIDO" (planilha.tipo_credito);
     `perdcomp`: 24 dígitos (coluna M)."""
     if tributo not in TEXTO_TIPO_CREDITO:
         raise ValueError(f"tributo fora do escopo: {tributo!r}")
