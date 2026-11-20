@@ -439,8 +439,10 @@ def test_empresas_prioritarias_vem_antes_de_todas_as_outras(tmp_path):
     assert [g.certificado for g in lote.grupos] == ["Save Inteligência", "D&S", "Save Inteligência"]
 
 
-def test_preparar_lote_filtra_e_agrega_os_problemas(tmp_path):
+def test_preparar_lote_filtra_e_agrega_os_problemas(tmp_path, monkeypatch):
     from tests.test_certificados import _pfx
+    from VerificacaoPagamento import planilha
+    monkeypatch.setattr(planilha, "PAGAMENTO_INDEVIDO_ATIVO", True)
 
     _pfx(tmp_path / "Save Inteligência.pfx", "s")
     _pfx(tmp_path / "D&S.pfx", "s")
@@ -718,8 +720,9 @@ def test_duas_sessoes_divididas_por_certificado_sem_perdcomp_nas_duas(monkeypatc
 def test_restituicao_04_entra_e_outros_codigos_ficam_fora_do_lote(monkeypatch):
     """PER/DCOMP de restituição (crédito 04): desde 20/11/2026 entra, como
     "Pagamento Indevido ou a Maior". Outros códigos continuam fora."""
-    from VerificacaoPagamento import execucao
+    from VerificacaoPagamento import execucao, planilha
 
+    monkeypatch.setattr(planilha, "PAGAMENTO_INDEVIDO_ATIVO", True)
     monkeypatch.setattr(execucao, "carregar_certificado",
                         lambda caminho, senhas: Certificado(caminho.stem, caminho, "x"))
     linhas = [_linha(2, CNPJ_A, perdcomp="055073257922092612040646"),   # restituição: entra

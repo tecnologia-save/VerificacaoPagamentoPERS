@@ -129,9 +129,11 @@ def test_erro_comum_sem_aviso_continua_erro_comum(cenario, monkeypatch):
         portal.processar_linha(sessao, _linha("PIS"))
 
 
-def test_pagamento_indevido_seleciona_o_tipo_e_recusado_vai_direto_para_a_aa(cenario):
+def test_pagamento_indevido_seleciona_o_tipo_e_recusado_vai_direto_para_a_aa(cenario, monkeypatch):
     """Regra de 20/11/2026: código 04 / coluna K sem PIS nem COFINS -> "Pagamento
     Indevido ou a Maior"; se a Receita recusar, não há troca a tentar."""
+    from VerificacaoPagamento import planilha
+    monkeypatch.setattr(planilha, "PAGAMENTO_INDEVIDO_ATIVO", True)
     portal, sessao, eventos, recusados = cenario
     linha = LinhaPerdcomp(numero_linha=7, cnpj=CNPJ, tributo="INSS",
                           perdcomp="1" * 18 + "04" + "0" * 4)

@@ -55,6 +55,7 @@ from .desfechos import (
 )
 from .formulario_perdcomp import navegador_fechou
 from .planilha import (
+    TRIBUTO_PAGAMENTO_INDEVIDO,
     DadosPlanilha,
     GrupoCertificado,
     codigo_credito,
@@ -218,7 +219,8 @@ def preparar_lote(dados: DadosPlanilha, limite: int | None, pfx_disponiveis: dic
             tributo_fora[linha.tributo.strip() or "(vazio)"] += 1
         elif len(linha.perdcomp) != 24 or not linha.perdcomp.isdigit():
             perdcomp_invalido.append(linha.numero_linha)
-        elif codigo_credito(linha.perdcomp) not in CODIGOS_CREDITO_ATENDIDOS:
+        elif (linha.tipo_credito != TRIBUTO_PAGAMENTO_INDEVIDO
+              and codigo_credito(linha.perdcomp) not in CODIGOS_CREDITO_ATENDIDOS):
             credito_fora[codigo_credito(linha.perdcomp)] += 1
         elif linha.perdcomp in vistos:
             # PER/DCOMP repetido na planilha: só a primeira linha vai ao e-CAC

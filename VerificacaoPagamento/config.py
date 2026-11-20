@@ -68,10 +68,14 @@ APELIDOS_CERTIFICADO = {
 # do lote em silêncio (só uma linha no log) — pedido do usuário, 18/11/2026.
 # Tipo de crédito, pelo NÚMERO do PER/DCOMP (dígitos 19-20; no número formatado,
 # o "19" de 05507.32579.220926.1.1.19-0646): 18/19 = ressarcimento de PIS/COFINS
-# não-cumulativo; "04" = restituição de pagamento indevido ou a maior — desde
-# 20/11/2026 preenchido como "Pagamento Indevido ou a Maior" (planilha.tipo_credito).
-# Outros códigos ficam fora do lote, com a AA vazia.
-CODIGOS_CREDITO_ATENDIDOS = ("18", "19", "04")
+# não-cumulativo. Outros códigos ficam fora do lote, com a AA vazia — menos as
+# linhas de "Pagamento Indevido ou a Maior" (planilha.tipo_credito), quando ligado.
+CODIGOS_CREDITO_ATENDIDOS = ("18", "19")
+# Regra do usuário (20/11/2026): código 04 e coluna K sem PIS nem COFINS ->
+# "Pagamento Indevido ou a Maior". DESLIGADO: a tela "Informar Crédito" desse
+# tipo (abas Identificação / Detalhamento / Demonstrativo, sem o checkbox de
+# não litígio) ainda não está mapeada no fluxo (etapas_dcomp).
+PAGAMENTO_INDEVIDO_ATIVO = False
 
 PROCURADORES_IGNORADOS = ("ELIANE",)
 

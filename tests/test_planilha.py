@@ -160,4 +160,7 @@ def test_status_z_permitido():
 ])
 def test_tipo_credito(tributo, codigo, esperado):
     from VerificacaoPagamento.planilha import tipo_credito
-    assert tipo_credito(tributo, "1" * 18 + codigo + "0" * 4) == esperado
+    perdcomp = "1" * 18 + codigo + "0" * 4
+    assert tipo_credito(tributo, perdcomp, pagamento_indevido=True) == esperado
+    # desligado: só a coluna K
+    assert tipo_credito(tributo, perdcomp, pagamento_indevido=False) == tipo_tributo(tributo)
