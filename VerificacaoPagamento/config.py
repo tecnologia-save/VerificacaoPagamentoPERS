@@ -83,7 +83,9 @@ PAGAMENTO_INDEVIDO_ATIVO = True
 # "não é um documento original" (formulario_perdcomp.recuperar_original_se_perguntado),
 # e o INSS entra pelo CÓDIGO 24 (planilha.CODIGOS_PAGAMENTO_INDEVIDO), não pela K.
 # "Contribuição Previdenciária Indevida ou a Maior" a Receita recusa para o 24.
-PAGAMENTO_INDEVIDO_PELA_COLUNA_K = False
+# LIGADO (regra do usuário, 21/11/2026): K que não é PIS nem COFINS (IPI, um ano
+# como "2025"...) -> "Pagamento Indevido ou a Maior", seja qual for o código.
+PAGAMENTO_INDEVIDO_PELA_COLUNA_K = True
 
 PROCURADORES_IGNORADOS = ("ELIANE",)
 
