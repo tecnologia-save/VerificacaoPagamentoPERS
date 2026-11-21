@@ -192,6 +192,34 @@ def test_nao_pertence_ao_contribuinte_troca_o_tipo_e_refaz_tudo(cenario, monkeyp
     assert desfecho.tributo_corrigido == (esperado[2] if esperado[2] in ("PIS", "COFINS") else "")
 
 
+def test_nao_pertence_e_depois_tipo_divergente_ainda_tenta_pagamento_indevido(cenario, monkeypatch):
+    """Linhas 1175/1176 da Parte 1 (21/11/2026): COFINS 'não pertence', PIS
+    'tipo divergente' -> antes ia para a AA sem tentar Pagamento Indevido."""
+    from VerificacaoPagamento.desfechos import PerdcompNaoPertence
+
+    portal, sessao, eventos, _ = cenario
+    atual = {"t": ""}
+
+    def preencher(page, *, tributo, perdcomp, diagnostico):
+        atual["t"] = tributo
+        eventos.append(("preencher", tributo))
+        return perdcomp
+
+    def concluir(page, **kw):
+        if atual["t"] == "COFINS":
+            raise PerdcompNaoPertence("não pertence ao contribuinte")
+        if atual["t"] == "PIS":
+            raise mod.TipoCreditoDivergente("tipo divergente")
+        return Desfecho(True, "pago", situacao=SITUACAO_PAGAMENTO_REALIZADO)
+
+    monkeypatch.setattr(mod, "preencher_identificacao", preencher)
+    monkeypatch.setattr(mod, "concluir_declaracao", concluir)
+    desfecho = portal.processar_linha(sessao, _linha("COFINS"))
+    assert desfecho.situacao == SITUACAO_PAGAMENTO_REALIZADO
+    assert [e[1] for e in eventos if e[0] == "preencher"] == ["COFINS", "PIS", "PAGAMENTO INDEVIDO"]
+    assert not desfecho.tributo_corrigido
+
+
 def test_nao_pertence_com_todos_os_tipos_vai_para_a_aa(cenario, monkeypatch):
     from VerificacaoPagamento.config import SITUACAO_PERDCOMP_NAO_PERTENCE
 

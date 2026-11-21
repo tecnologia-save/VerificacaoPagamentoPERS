@@ -188,6 +188,26 @@ class PortalReal:
 
         tributo = linha.tipo_credito
         tentados: list[str] = []
+        # Depois de um "não pertence", qualquer recusa (inclusive "tipo
+        # divergente") passa ao próximo tipo não tentado: PIS -> COFINS -> PI.
+        recusas: dict[str, str] = {}
+
+        def _proximo_ou_aa(motivo: str, situacao: str) -> Desfecho | None:
+            nonlocal tributo
+            recusas[tributo] = motivo
+            proximo = next((t for t in ordem_nao_pertence(linha.tipo_credito)
+                            if t not in tentados), None)
+            if proximo is None:
+                detalhe = "; ".join(f"{TEXTO_CURTO.get(t, t)}: {m}" for t, m in recusas.items())
+                print(f"  -> [TRIBUTO] Recusado com todos os tipos de credito ({detalhe}): linha "
+                      f"{linha.numero_linha} vai para a AA e a execucao segue.")
+                return Desfecho(True, f"{situacao} (tentado {detalhe})",
+                                situacao=situacao, tela_conhecida=False)
+            print(f"  -> [TRIBUTO] {motivo} como {TEXTO_CURTO.get(tributo, tributo)}: refazendo a "
+                  f"linha {linha.numero_linha} como {TEXTO_CURTO.get(proximo, proximo)}.")
+            tributo = proximo
+            return None
+
         while True:
             tentados.append(tributo)
             if len(tentados) > 1:
@@ -223,20 +243,17 @@ class PortalReal:
             except PerdcompNaoPertence:
                 # Regra do usuário (21/11/2026): PIS -> COFINS -> Pagamento
                 # Indevido (e vice-versa), refazendo tudo a cada troca.
-                proximo = next((t for t in ordem_nao_pertence(linha.tipo_credito)
-                                if t not in tentados), None)
-                if proximo is None:
-                    nomes = ", ".join(TEXTO_CURTO.get(t, t) for t in tentados)
-                    print(f"  -> [TRIBUTO] PER/DCOMP 'nao pertence ao contribuinte' com todos os tipos "
-                          f"({nomes}): linha {linha.numero_linha} vai para a AA e a execucao segue.")
-                    return Desfecho(True, f"{SITUACAO_PERDCOMP_NAO_PERTENCE} (tentado {nomes})",
-                                    situacao=SITUACAO_PERDCOMP_NAO_PERTENCE, tela_conhecida=False)
-                print(f"  -> [TRIBUTO] 'O PER/DCOMP informado nao pertence ao contribuinte' como "
-                      f"{TEXTO_CURTO.get(tributo, tributo)}: refazendo a linha {linha.numero_linha} "
-                      f"como {TEXTO_CURTO.get(proximo, proximo)}.")
-                tributo = proximo
+                fim = _proximo_ou_aa("nao pertence ao contribuinte", SITUACAO_PERDCOMP_NAO_PERTENCE)
+                if fim is not None:
+                    return fim
                 continue
             except TipoCreditoDivergente:
+                if recusas:
+                    # Já houve "não pertence" nesta linha: segue a rotação até PI.
+                    fim = _proximo_ou_aa("tipo divergente", SITUACAO_TIPO_CREDITO_DIVERGENTE)
+                    if fim is not None:
+                        return fim
+                    continue
                 if tributo in TRIBUTOS_CREDITO_EM_ABAS:
                     # Não há "outro" para tentar (a troca é só PIS <-> COFINS).
                     print(f"  -> [TRIBUTO] Tipo de credito '{TEXTO_TIPO_CREDITO[tributo]}' recusado: "
