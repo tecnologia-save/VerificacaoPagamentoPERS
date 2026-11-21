@@ -607,6 +607,26 @@ def enviar(page, *, antes_de_enviar=None, diagnostico=None) -> Desfecho:
     return desfecho
 
 
+SELETOR_PENDENCIA_IMPEDITIVA = ('perdcomp-verificar-pendencias div[name="pendencia"]'
+                                ':has(i.icon-remove_sign.error) .col-xs-6')
+
+
+def motivos_nao_apto(page, limite: int = 250) -> str:
+    """Texto das pendências que impedem o envio (ex.: "Empresa baixada pelo
+    motivo INCORPORACAO: o acesso ao PERDCOMP Web deverá ser feito pela empresa
+    sucessora" — linha 800 da Parte 2, 21/11/2026), para a AA dizer o porquê.
+    "" se não conseguir ler; nunca levanta."""
+    try:
+        textos = _frame(page).locator(SELETOR_PENDENCIA_IMPEDITIVA).all_inner_texts()
+    except Exception:  # noqa: BLE001 — o motivo é só informativo
+        return ""
+    vistos: list[str] = []
+    for texto in (" ".join(t.split()) for t in textos):
+        if texto and texto not in vistos:
+            vistos.append(texto)
+    return " | ".join(vistos)[:limite]
+
+
 def concluir_declaracao(page, *, permitir_envio: bool, antes_de_enviar=None,
                         diagnostico=None, conferencias_identificacao=(),
                         pagamento_indevido: bool = False) -> Desfecho:
@@ -619,7 +639,12 @@ def concluir_declaracao(page, *, permitir_envio: bool, antes_de_enviar=None,
     informar_debito(page, diagnostico)
     responsavel(page, diagnostico)
     if not documento_apto(page, diagnostico):
-        return Desfecho(True, "Documento não apto para envio", situacao=SITUACAO_NAO_APTO)
+        motivos = motivos_nao_apto(page)
+        if motivos:
+            print(f"  -> Pendencia(s) que impedem o envio: {motivos}")
+        return Desfecho(True, f"Documento não apto para envio{': ' + motivos if motivos else ''}",
+                        situacao=(f"{SITUACAO_NAO_APTO} — {motivos}" if motivos
+                                  else SITUACAO_NAO_APTO))
     if not permitir_envio:
         return Desfecho(True, "Apto para envio — MODO SEGURO: 'Enviar' não foi clicado")
     return enviar(page, antes_de_enviar=antes_de_enviar, diagnostico=diagnostico)

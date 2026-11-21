@@ -203,7 +203,7 @@ $('[name=btnProsseguir]').addEventListener('click', () => {
     mostrar('tela-pendencias'); m.etapa = 'pendencias'; etapa('Verificar Pendências');
     if (__VAZIA__) { msg('Não é possível prosseguir neste momento. Tente novamente mais tarde.'); }
     else if (__APTO__) setTimeout(() => mostrar('apto'), 300);
-    else { $('#tela-pendencias').insertAdjacentHTML('beforeend', '<div class="erro">O Documento não está apto para envio (1)</div>'); }
+    else { $('#tela-pendencias').insertAdjacentHTML('beforeend', '<div class="erro">O Documento não está apto para envio (1)</div>' + '<perdcomp-verificar-pendencias><div name="pendencia"><div class="col-xs-1"><i class="icon-remove_sign error"></i></div><div class="col-xs-5"><a>Contribuinte</a></div><div class="col-xs-6"><a>Empresa baixada pelo motivo INCORPORACAO: o acesso ao PERDCOMP Web deverá ser feito pela empresa sucessora</a></div></div><div name="pendencia"><div class="col-xs-1"><i class="icon-warning_sign alerta"></i></div><div class="col-xs-6"><a>Aviso que não impede</a></div></div></perdcomp-verificar-pendencias>'); }
   } else if (m.etapa === 'pendencias') {
     esconder('tela-pendencias'); mostrar('tela-envio'); m.etapa = 'envio';
   }
@@ -329,7 +329,9 @@ def test_nao_apto_nao_envia(abrir, monkeypatch):
     page = abrir(apto=False)
     retratos = []
     desfecho = _declaracao(page, permitir_envio=True, diagnostico=retratos.append)
-    assert desfecho.situacao == SITUACAO_NAO_APTO
+    # o porquê vai para a AA (usuário, 21/11/2026), só as pendências impeditivas
+    assert desfecho.situacao == (f"{SITUACAO_NAO_APTO} — Empresa baixada pelo motivo INCORPORACAO: "
+                                 "o acesso ao PERDCOMP Web deverá ser feito pela empresa sucessora")
     assert _estado(page)["envios"] == "0"
     assert "nao_apto" in retratos
 
