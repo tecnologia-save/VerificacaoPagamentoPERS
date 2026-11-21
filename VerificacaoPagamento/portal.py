@@ -11,6 +11,7 @@ from .certificados import Certificado
 from .config import (
     PERMITIR_ACOES_REAIS_NO_ECAC,
     SITUACAO_PERDCOMP_CANCELADO,
+    SITUACAO_PERDCOMP_NAO_PERTENCE,
     SITUACAO_TIPO_CREDITO_DIVERGENTE,
 )
 from .desfechos import (
@@ -19,6 +20,7 @@ from .desfechos import (
     EnvioRecusadoPeloServidor,
     EnvioSemConfirmacao,
     PerdcompCancelado,
+    PerdcompNaoPertence,
     SemPermissaoPerdcomp,
     TipoCreditoDivergente,
 )
@@ -33,10 +35,27 @@ from .formulario_perdcomp import (
 )
 from .navegacao import navegar_modulo_perdcomp
 from .formulario_perdcomp import TEXTO_TIPO_CREDITO
-from .planilha import TRIBUTO_COFINS, TRIBUTO_PIS, TRIBUTOS_CREDITO_EM_ABAS, LinhaPerdcomp
+from .planilha import (
+    TRIBUTO_COFINS,
+    TRIBUTO_PAGAMENTO_INDEVIDO,
+    TRIBUTO_PIS,
+    TRIBUTOS_CREDITO_EM_ABAS,
+    LinhaPerdcomp,
+)
 
 # Pausa depois que a sonda diz que o e-CAC voltou, antes de refazer a linha.
 ESPERA_ERRO_REDE_S = 30
+
+
+TEXTO_CURTO = {TRIBUTO_PAGAMENTO_INDEVIDO: "Pagamento Indevido"}
+
+
+def ordem_nao_pertence(primeiro: str) -> list[str]:
+    """Ordem dos tipos de crédito para "não pertence ao contribuinte" (regra do
+    usuário, 21/11/2026): o da linha, depois os outros de PIS, COFINS,
+    Pagamento Indevido — PIS -> COFINS -> PI; COFINS -> PIS -> PI; PI -> PIS -> COFINS."""
+    todos = [TRIBUTO_PIS, TRIBUTO_COFINS, TRIBUTO_PAGAMENTO_INDEVIDO]
+    return [primeiro] + [t for t in todos if t != primeiro]
 
 
 class PerfilDivergente(Exception):
@@ -168,10 +187,12 @@ class PortalReal:
             print("  -> [AVISO] Perfil ativo nao lido na pagina (conferido na entrada da empresa).")
 
         tributo = linha.tipo_credito
-        for tentativa in (1, 2):
-            if tentativa == 2:
-                # A Receita disse que o tipo de crédito é o outro: refaz do zero
-                # com PIS <-> COFINS (trocar o tipo apaga os outros campos).
+        tentados: list[str] = []
+        while True:
+            tentados.append(tributo)
+            if len(tentados) > 1:
+                # Outro tipo de crédito: refaz do zero (trocar o tipo apaga os
+                # outros campos).
                 navegar_modulo_perdcomp(page)
             try:
                 perdcomp = preencher_identificacao(page, tributo=tributo, perdcomp=linha.perdcomp,
@@ -199,6 +220,22 @@ class PortalReal:
                 return Desfecho(True, "O documento que contém o detalhamento do crédito "
                                       "encontra-se cancelado.",
                                 situacao=SITUACAO_PERDCOMP_CANCELADO, tela_conhecida=False)
+            except PerdcompNaoPertence:
+                # Regra do usuário (21/11/2026): PIS -> COFINS -> Pagamento
+                # Indevido (e vice-versa), refazendo tudo a cada troca.
+                proximo = next((t for t in ordem_nao_pertence(linha.tipo_credito)
+                                if t not in tentados), None)
+                if proximo is None:
+                    nomes = ", ".join(TEXTO_CURTO.get(t, t) for t in tentados)
+                    print(f"  -> [TRIBUTO] PER/DCOMP 'nao pertence ao contribuinte' com todos os tipos "
+                          f"({nomes}): linha {linha.numero_linha} vai para a AA e a execucao segue.")
+                    return Desfecho(True, f"{SITUACAO_PERDCOMP_NAO_PERTENCE} (tentado {nomes})",
+                                    situacao=SITUACAO_PERDCOMP_NAO_PERTENCE, tela_conhecida=False)
+                print(f"  -> [TRIBUTO] 'O PER/DCOMP informado nao pertence ao contribuinte' como "
+                      f"{TEXTO_CURTO.get(tributo, tributo)}: refazendo a linha {linha.numero_linha} "
+                      f"como {TEXTO_CURTO.get(proximo, proximo)}.")
+                tributo = proximo
+                continue
             except TipoCreditoDivergente:
                 if tributo in TRIBUTOS_CREDITO_EM_ABAS:
                     # Não há "outro" para tentar (a troca é só PIS <-> COFINS).
@@ -208,7 +245,8 @@ class PortalReal:
                                           f"{TEXTO_TIPO_CREDITO[tributo]})",
                                     situacao=SITUACAO_TIPO_CREDITO_DIVERGENTE,
                                     tela_conhecida=False)
-                if tentativa == 2:
+                outro = TRIBUTO_COFINS if tributo == TRIBUTO_PIS else TRIBUTO_PIS
+                if outro in tentados:
                     # Recusado com os DOIS tributos: é o resultado da linha (AA) —
                     # o navegador continua aberto; a próxima linha recarrega o módulo.
                     print(f"  -> [TRIBUTO] Tipo de credito recusado com PIS e com COFINS: linha "
@@ -217,14 +255,14 @@ class PortalReal:
                                           "e com COFINS)",
                                     situacao=SITUACAO_TIPO_CREDITO_DIVERGENTE,
                                     tela_conhecida=False)
-                tributo = TRIBUTO_COFINS if tributo == TRIBUTO_PIS else TRIBUTO_PIS
+                tributo = outro
                 print(f"  -> [TRIBUTO] A Receita indicou outro tipo de credito: refazendo a linha "
                       f"{linha.numero_linha} como {tributo} (coluna K diz {linha.tributo!r}).")
                 continue
-            if tributo != linha.tipo_credito:
+            # Coluna K corrigida só para PIS/COFINS (Pagamento Indevido não é tributo da K).
+            if tributo != linha.tipo_credito and tributo in (TRIBUTO_PIS, TRIBUTO_COFINS):
                 desfecho.tributo_corrigido = tributo
             return desfecho
-        raise AssertionError("inalcancavel")
 
     def capturar(self, sessao: _sessao.Sessao | None, rotulo: str) -> None:
         if sessao is None:

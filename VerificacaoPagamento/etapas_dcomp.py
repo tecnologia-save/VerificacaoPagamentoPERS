@@ -51,6 +51,7 @@ from .desfechos import (
     EnvioRecusadoPeloServidor,
     EnvioSemConfirmacao,
     PerdcompCancelado,
+    PerdcompNaoPertence,
     TipoCreditoDivergente,
 )
 from .formulario_perdcomp import (
@@ -129,6 +130,9 @@ TEXTO_TIPO_CREDITO_DIVERGENTE = "tipo de crédito do per/dcomp que contém o det
 # "O documento que contém o detalhamento do crédito encontra-se cancelado"
 # (HTML enviado pelo usuário, 19/11/2026).
 TEXTO_PERDCOMP_CANCELADO = "detalhamento do crédito encontra-se cancelado"
+# "O PER/DCOMP informado não pertence ao contribuinte e nem a uma empresa
+# sucedida" (HTML enviado pelo usuário, 21/11/2026): troca o tipo de crédito.
+TEXTO_PERDCOMP_NAO_PERTENCE = "não pertence ao contribuinte"
 
 
 # "Aguarde a página carregar": a transmissão pode demorar (nas Protocolações já
@@ -245,13 +249,16 @@ def termo_e_litigio(page, diagnostico=None, conferencias_identificacao=(), *,
     def _cancelado() -> bool:
         return TEXTO_PERDCOMP_CANCELADO in mensagens_da_tela(page).casefold()
 
+    def _nao_pertence() -> bool:
+        return TEXTO_PERDCOMP_NAO_PERTENCE in mensagens_da_tela(page).casefold()
+
     def _vigiar() -> bool:
         # Enquanto espera a próxima tela: responde "Sim" ao aviso do PER/DCOMP
         # não original (no máximo 3 vezes) e para se o tipo de crédito divergir
         # ou se o PER/DCOMP estiver cancelado.
         if respostas_original[0] < 3 and responder_recuperar_original(page):
             respostas_original[0] += 1
-        return _cancelado() or _tipo_divergente()
+        return _cancelado() or _tipo_divergente() or _nao_pertence()
 
     apareceu = prosseguir_ate(page, (SELETOR_TERMO, *proxima), "identificacao",
                               conferencias=conferencias_identificacao, diagnostico=diagnostico,
@@ -260,6 +267,8 @@ def termo_e_litigio(page, diagnostico=None, conferencias_identificacao=(), *,
         raise PerdcompCancelado(mensagens_da_tela(page)[:200])
     if not apareceu and _tipo_divergente():
         raise TipoCreditoDivergente(mensagens_da_tela(page)[:200])
+    if not apareceu and _nao_pertence():
+        raise PerdcompNaoPertence(mensagens_da_tela(page)[:200])
     if apareceu == SELETOR_TERMO:
         print("FASE: Termo de inconstitucionalidade -> Nao + OK")
         frame = _frame(page)

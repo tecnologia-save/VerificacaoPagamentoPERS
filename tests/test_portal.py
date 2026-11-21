@@ -148,3 +148,56 @@ def test_pagamento_indevido_seleciona_o_tipo_e_recusado_vai_direto_para_a_aa(cen
     assert desfecho.situacao == SITUACAO_TIPO_CREDITO_DIVERGENTE
     assert desfecho.tela_conhecida is False
     assert [e for e in eventos if e[0] == "preencher"] == [("preencher", "PAGAMENTO INDEVIDO")]
+
+
+def _cenario_nao_pertence(cenario, monkeypatch, nao_pertence: set[str]):
+    from VerificacaoPagamento.desfechos import PerdcompNaoPertence
+
+    portal, sessao, eventos, _ = cenario
+    atual = {"t": ""}
+
+    def preencher(page, *, tributo, perdcomp, diagnostico):
+        atual["t"] = tributo
+        eventos.append(("preencher", tributo))
+        return perdcomp
+
+    def concluir(page, **kw):
+        if atual["t"] in nao_pertence:
+            raise PerdcompNaoPertence("O PER/DCOMP informado não pertence ao contribuinte e nem a "
+                                      "uma empresa sucedida")
+        return Desfecho(True, "pago", situacao=SITUACAO_PAGAMENTO_REALIZADO)
+
+    monkeypatch.setattr(mod, "preencher_identificacao", preencher)
+    monkeypatch.setattr(mod, "concluir_declaracao", concluir)
+    return portal, sessao, eventos
+
+
+@pytest.mark.parametrize("k, codigo, esperado", [
+    ("PIS", "19", ["PIS", "COFINS", "PAGAMENTO INDEVIDO"]),
+    ("COFINS", "18", ["COFINS", "PIS", "PAGAMENTO INDEVIDO"]),
+    ("INSS", "24", ["PAGAMENTO INDEVIDO", "PIS", "COFINS"]),
+])
+def test_nao_pertence_ao_contribuinte_troca_o_tipo_e_refaz_tudo(cenario, monkeypatch, k, codigo,
+                                                                 esperado):
+    """Regra do usuário (21/11/2026): "O PER/DCOMP informado não pertence ao
+    contribuinte" -> PIS -> COFINS -> Pagamento Indevido (e vice-versa),
+    preenchendo tudo de novo a cada troca."""
+    portal, sessao, eventos = _cenario_nao_pertence(cenario, monkeypatch, set(esperado[:2]))
+    linha = LinhaPerdcomp(numero_linha=7, cnpj=CNPJ, tributo=k, perdcomp="1" * 18 + codigo + "0" * 4)
+    desfecho = portal.processar_linha(sessao, linha)
+    assert desfecho.situacao == SITUACAO_PAGAMENTO_REALIZADO
+    assert [e[1] for e in eventos if e[0] == "preencher"] == esperado
+    assert eventos.count(("modulo",)) == 2                 # refez do zero a cada troca
+    # a coluna K só é corrigida para PIS/COFINS
+    assert desfecho.tributo_corrigido == (esperado[2] if esperado[2] in ("PIS", "COFINS") else "")
+
+
+def test_nao_pertence_com_todos_os_tipos_vai_para_a_aa(cenario, monkeypatch):
+    from VerificacaoPagamento.config import SITUACAO_PERDCOMP_NAO_PERTENCE
+
+    portal, sessao, eventos = _cenario_nao_pertence(
+        cenario, monkeypatch, {"PIS", "COFINS", "PAGAMENTO INDEVIDO"})
+    desfecho = portal.processar_linha(sessao, _linha("COFINS"))
+    assert desfecho.ok and desfecho.situacao == SITUACAO_PERDCOMP_NAO_PERTENCE
+    assert desfecho.tela_conhecida is False
+    assert [e[1] for e in eventos if e[0] == "preencher"] == ["COFINS", "PIS", "PAGAMENTO INDEVIDO"]

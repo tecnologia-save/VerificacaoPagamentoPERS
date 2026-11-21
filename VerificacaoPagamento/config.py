@@ -134,6 +134,11 @@ SITUACAO_TIPO_CREDITO_DIVERGENTE = ("Tipo do crédito informado neste documento 
 # crédito encontra-se cancelado" (regra do usuário, 19/11/2026): grava isto na
 # AA e segue para a próxima linha.
 SITUACAO_PERDCOMP_CANCELADO = "Perdcomp cancelado"
+# "O PER/DCOMP informado não pertence ao contribuinte e nem a uma empresa
+# sucedida" com TODOS os tipos de crédito (PIS, COFINS e Pagamento Indevido —
+# regra do usuário, 21/11/2026): grava na AA e segue.
+SITUACAO_PERDCOMP_NAO_PERTENCE = ("O PER/DCOMP informado não pertence ao contribuinte e nem a "
+                                  "uma empresa sucedida")
 # Ao abrir o módulo: "Seu perfil não possui permissão ou a execução exige acesso
 # com certificado digital" = a procuração não dá poder para o PER/DCOMP (regra
 # do usuário, 19/11/2026): grava isto na AA das linhas da empresa e segue.

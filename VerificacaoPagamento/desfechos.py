@@ -65,6 +65,13 @@ class PerdcompCancelado(Exception):
     refaz nem com o outro tributo."""
 
 
+class PerdcompNaoPertence(Exception):
+    """No "Prosseguir" da identificação: "O PER/DCOMP informado não pertence
+    ao contribuinte e nem a uma empresa sucedida". Regra do usuário
+    (21/11/2026): trocar o tipo de crédito e refazer tudo — PIS -> COFINS ->
+    Pagamento Indevido (e vice-versa)."""
+
+
 class SemPermissaoPerdcomp(Exception):
     """Ao abrir o PER/DCOMP: "Seu perfil não possui permissão ou a execução
     exige acesso com certificado digital" — a procuração não alcança o módulo.
