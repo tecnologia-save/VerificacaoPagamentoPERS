@@ -150,6 +150,32 @@ def test_pagamento_indevido_seleciona_o_tipo_e_recusado_vai_direto_para_a_aa(cen
     assert [e for e in eventos if e[0] == "preencher"] == [("preencher", "PAGAMENTO INDEVIDO")]
 
 
+@pytest.mark.parametrize("k, codigo, recusados, esperado", [
+    # K com ano/IPI e PER/DCOMP de PIS/COFINS: PI recusado -> PIS -> COFINS
+    ("2025", "19", {"PAGAMENTO INDEVIDO"}, ["PAGAMENTO INDEVIDO", "PIS"]),
+    ("IPI", "18", {"PAGAMENTO INDEVIDO", "PIS"}, ["PAGAMENTO INDEVIDO", "PIS", "COFINS"]),
+])
+def test_pi_pela_coluna_k_recusado_tenta_pis_e_cofins(cenario, k, codigo, recusados, esperado):
+    """Regra do usuário (21/11/2026): K sem PIS nem COFINS -> Pagamento Indevido;
+    se a Receita recusar (PER/DCOMP de outro código), segue PIS -> COFINS."""
+    portal, sessao, eventos, rec = cenario
+    rec.update(recusados)
+    linha = LinhaPerdcomp(numero_linha=7, cnpj=CNPJ, tributo=k, perdcomp="1" * 18 + codigo + "0" * 4)
+    desfecho = portal.processar_linha(sessao, linha)
+    assert desfecho.situacao == SITUACAO_PAGAMENTO_REALIZADO
+    assert [e[1] for e in eventos if e[0] == "preencher"] == esperado
+    assert desfecho.tributo_corrigido == esperado[-1]           # a K passa a dizer o tributo
+
+
+def test_pi_pela_coluna_k_recusado_com_todos_vai_para_a_aa(cenario):
+    portal, sessao, eventos, rec = cenario
+    rec.update({"PAGAMENTO INDEVIDO", "PIS", "COFINS"})
+    linha = LinhaPerdcomp(numero_linha=7, cnpj=CNPJ, tributo="IPI", perdcomp="1" * 18 + "01" + "0" * 4)
+    desfecho = portal.processar_linha(sessao, linha)
+    assert desfecho.ok and desfecho.situacao == SITUACAO_TIPO_CREDITO_DIVERGENTE
+    assert [e[1] for e in eventos if e[0] == "preencher"] == ["PAGAMENTO INDEVIDO", "PIS", "COFINS"]
+
+
 def _cenario_nao_pertence(cenario, monkeypatch, nao_pertence: set[str]):
     from VerificacaoPagamento.desfechos import PerdcompNaoPertence
 

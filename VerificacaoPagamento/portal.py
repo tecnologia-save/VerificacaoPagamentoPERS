@@ -36,6 +36,8 @@ from .formulario_perdcomp import (
 from .navegacao import navegar_modulo_perdcomp
 from .formulario_perdcomp import TEXTO_TIPO_CREDITO
 from .planilha import (
+    CODIGOS_PAGAMENTO_INDEVIDO,
+    codigo_credito,
     TRIBUTO_COFINS,
     TRIBUTO_PAGAMENTO_INDEVIDO,
     TRIBUTO_PIS,
@@ -248,8 +250,11 @@ class PortalReal:
                     return fim
                 continue
             except TipoCreditoDivergente:
-                if recusas:
-                    # Já houve "não pertence" nesta linha: segue a rotação até PI.
+                if recusas or (tributo == TRIBUTO_PAGAMENTO_INDEVIDO
+                               and codigo_credito(linha.perdcomp) not in CODIGOS_PAGAMENTO_INDEVIDO):
+                    # Já houve "não pertence" nesta linha, ou é PI só pela coluna K
+                    # (IPI, ano...) com PER/DCOMP de outro código: segue a rotação
+                    # (PIS -> COFINS -> PI e vice-versa).
                     fim = _proximo_ou_aa("tipo divergente", SITUACAO_TIPO_CREDITO_DIVERGENTE)
                     if fim is not None:
                         return fim

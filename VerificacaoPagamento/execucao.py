@@ -38,6 +38,8 @@ from .config import (
     CODIGOS_CREDITO_ATENDIDOS,
     SITUACAO_MENSAGENS_IMPORTANTES,
     SITUACAO_LIMITE_RASCUNHOS,
+    MOTIVOS_PERFIL_DEFINITIVOS,
+    SITUACAO_SEM_ACESSO_ECAC,
     SITUACAO_SEM_PERMISSAO,
     TEXTO_LIMITE_RASCUNHOS,
     MAX_ENVIOS_SEM_CONFIRMACAO,
@@ -84,6 +86,20 @@ MAX_ESPERAS_REDE_LINHA = 60
 # usuário: nesse horário a automação para e volta às 3h01. Nenhuma linha
 # começa a partir de 0h58 — uma linha leva ~40 s e não pode estar no meio à 1h.
 JANELA_RECEITANET = (hora_do_dia(0, 58), hora_do_dia(3, 1))
+
+
+def recusa_definitiva(mensagem: str) -> bool:
+    """Recusa de perfil que não muda repetindo (CNPJ nulo, sem procuração...)."""
+    texto = normalizar_texto(mensagem)
+    return any(motivo in texto for motivo in MOTIVOS_PERFIL_DEFINITIVOS)
+
+
+def texto_sem_acesso(mensagem: str) -> str:
+    """AA da empresa em que o e-CAC não deixa entrar: prefixo + o motivo dele."""
+    motivo = mensagem.strip()
+    if motivo.upper().startswith("ATENÇÃO:"):
+        motivo = motivo[len("ATENÇÃO:"):].strip()
+    return f"{SITUACAO_SEM_ACESSO_ECAC}: {motivo}"
 
 
 def _agora() -> datetime:
@@ -541,7 +557,14 @@ def executar(lote: Lote, portal, *, checkpoint=None, registro=None,
                     modulo_aberto = False
                 except PerfilRecusado as e:
                     print(f"  -> [ERRO] e-CAC recusou o perfil da empresa: {e}")
-                    _falhar(empresa.linhas, f"e-CAC recusou o perfil da empresa: {e}")
+                    if recusa_definitiva(str(e)):
+                        # Repetir não muda nada: o motivo vai para a AA (regra
+                        # do usuário, 21/11/2026) e a empresa sai do lote.
+                        posicao += 1
+                        posicao = _encerrar_empresa(empresa, 0, empresa.linhas[0], posicao,
+                                                    texto_sem_acesso(str(e)), str(e))
+                    else:
+                        _falhar(empresa.linhas, f"e-CAC recusou o perfil da empresa: {e}")
                     continue
                 except EmpresaBloqueadaNaCaixaPostal as e:
                     if not _desbloquear(empresa, certificado):

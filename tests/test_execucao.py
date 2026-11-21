@@ -56,7 +56,9 @@ class PortalFalso:
     `perfil_fixo_no_login`: certificados cujo login não troca o perfil."""
 
     def __init__(self, *, recusa_perfil=(), falha_login=(), derruba_linha=(), erro_linha=(),
-                 mensagens=(), perfil_fixo_no_login=(), sem_confirmacao=(), tela_estranha=()):
+                 mensagens=(), perfil_fixo_no_login=(), sem_confirmacao=(), tela_estranha=(),
+                 motivo_recusa="acesso automatizado bloqueado"):
+        self.motivo_recusa = motivo_recusa
         self.sem_confirmacao = set(sem_confirmacao)
         self.tela_estranha = set(tela_estranha)
         self.recusa_perfil = set(recusa_perfil)
@@ -72,7 +74,7 @@ class PortalFalso:
         if certificado.nome in self.falha_login:
             raise LoginNaoConcluido("captcha")
         if cnpj in self.recusa_perfil:
-            raise PerfilRecusado("procuração expirada")
+            raise PerfilRecusado(self.motivo_recusa)
         sessao = _Sessao(certificado.nome, cnpj)
         if certificado.nome in self.perfil_fixo_no_login:
             sessao.perfil_real = "00000000000000"
@@ -81,7 +83,7 @@ class PortalFalso:
     def trocar_empresa(self, sessao, cnpj):
         self.eventos.append(("troca", cnpj))
         if cnpj in self.recusa_perfil:
-            raise PerfilRecusado("procuração expirada")
+            raise PerfilRecusado(self.motivo_recusa)
         sessao.cnpj_ativo = cnpj
         if sessao.perfil_real not in self.mensagens:  # o popup trava a troca
             sessao.perfil_real = cnpj
@@ -396,9 +398,30 @@ def test_empresa_recusada_nao_derruba_as_outras_do_certificado():
     portal = PortalFalso(recusa_perfil={CNPJ_B})
     resultados = _resultado(executar(lote, portal))
     assert resultados[2][0] and resultados[5][0]
-    assert not resultados[3][0] and "procuração expirada" in resultados[3][1]
+    assert not resultados[3][0] and "acesso automatizado" in resultados[3][1]
     assert not resultados[4][0]
     assert portal.tipos("troca") == [(CNPJ_B,), (CNPJ_C,)]
+
+
+@pytest.mark.parametrize("motivo", [
+    "ATENÇÃO: O CNPJ encontra-se na situação nula.",
+    "ATENÇÃO: Não existe procuração eletrônica para o detentor 24.245.826/0001-89 do "
+    "certificado digital apresentado.",
+])
+def test_perfil_recusado_por_motivo_definitivo_vai_para_a_aa(motivo):
+    """Regra do usuário (21/11/2026): empresa em que o e-CAC não deixa entrar ->
+    o porquê na AA, em todas as linhas dela; as outras empresas seguem."""
+    from VerificacaoPagamento.config import SITUACAO_SEM_ACESSO_ECAC
+
+    lote = _lote([(_linha(2, CNPJ_A), "Save"), (_linha(3, CNPJ_B), "Save"),
+                  (_linha(4, CNPJ_B), "Save"), (_linha(5, CNPJ_C), "Save")])
+    portal = PortalFalso(recusa_perfil={CNPJ_B}, motivo_recusa=motivo)
+    registro = RegistroFalso()
+    resultados = _resultado(executar(lote, portal, registro=registro))
+    assert all(resultados[n][0] for n in (2, 3, 4, 5))
+    esperado = f"{SITUACAO_SEM_ACESSO_ECAC}: {motivo[len('ATENÇÃO: '):]}"
+    assert (esperado, 3) in registro.anotacoes and (esperado, 4) in registro.anotacoes
+    assert portal.tipos("linha") == [(2, CNPJ_A), (5, CNPJ_C)]
 
 
 def test_perfil_recusado_no_primeiro_login_tenta_a_proxima_empresa_com_novo_login():
