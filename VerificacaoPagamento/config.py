@@ -79,8 +79,10 @@ PAGAMENTO_INDEVIDO_ATIVO = True
 # Coluna K sem PIS nem COFINS (INSS, IRPJ...) com PER/DCOMP de OUTRO código que
 # não o 04. DESLIGADO: teste em modo seguro de 20/11/2026 (linha 1772, INSS,
 # código 24): "O PER/DCOMP que contém o detalhamento do crédito não foi
-# localizado" -> não apto. O código 24 não é Pagamento Indevido (provavelmente
-# "Contribuição Previdenciária Indevida ou a Maior"); o usuário vai decidir.
+# localizado" -> não apto. Resolvido em 21/11/2026: faltava o "Sim" do popup
+# "não é um documento original" (formulario_perdcomp.recuperar_original_se_perguntado),
+# e o INSS entra pelo CÓDIGO 24 (planilha.CODIGOS_PAGAMENTO_INDEVIDO), não pela K.
+# "Contribuição Previdenciária Indevida ou a Maior" a Receita recusa para o 24.
 PAGAMENTO_INDEVIDO_PELA_COLUNA_K = False
 
 PROCURADORES_IGNORADOS = ("ELIANE",)

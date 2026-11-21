@@ -68,10 +68,12 @@ def _retificadora():
 
 
 def _app(*, opcoes=OPCOES_REAIS, overlay_ms=None, reage=True, tela_antiga=False,
-         formulario_visivel=False, prosseguir_aceita=True) -> str:
+         formulario_visivel=False, prosseguir_aceita=True, original="") -> str:
     """HTML do iframe. overlay_ms: None = sem overlay; N = some depois de N ms;
     -1 = nunca sai. `formulario_visivel`: a pergunta do tipo já na tela (sem
-    precisar de "Novo Documento")."""
+    precisar de "Novo Documento"). `original`: com o PER/DCOMP digitado, abre o
+    popup "não é um documento original" (HTML do usuário, 21/11/2026); o "Sim"
+    troca o campo por este número (já formatado)."""
     antiga = (f'<div id="antiga" style="display:none">{_radios(opcoes)}</div>'
               if tela_antiga else "")
     overlay = '<div class="ui-widget-overlay"></div>' if overlay_ms is not None else ""
@@ -105,6 +107,11 @@ def _app(*, opcoes=OPCOES_REAIS, overlay_ms=None, reage=True, tela_antiga=False,
     </form>
     <div id="tela-seguinte"{escondido}>Identificação do Crédito</div>
     <perdcomp-barra-botoes><button name="btnProsseguir" type="button">Prosseguir</button></perdcomp-barra-botoes>
+    <div id="popup-original" style="display:none"><div class="perdcomp-modal-overlay"></div>
+      <div class="areaTextoModal mensagemModal"> O PER/DCOMP que contém o detalhamento do crédito
+        não é um documento original. Deseja recuperar o documento original? </div>
+      <button id="botaoSimSubstituicaoDerivada" type="button" class="botaoModal">Sim</button>
+      <button id="botaoNaoSubstituicaoDerivada" type="button" class="botaoModal">Não</button></div>
     {overlay}
     <script>
       const marca = document.body.dataset;
@@ -134,6 +141,15 @@ def _app(*, opcoes=OPCOES_REAIS, overlay_ms=None, reage=True, tela_antiga=False,
         let s = '';
         for (const [a, b, sep] of cortes) {{ if (d.length > a) s += sep + d.slice(a, b); }}
         mascara.value = s;
+        if ('{original}' && d.length === 24 && !marca.popupOriginal) {{
+          marca.popupOriginal = 'aberto';
+          setTimeout(() => mostrar('popup-original'), 400);
+        }}
+      }});
+      document.getElementById('botaoSimSubstituicaoDerivada').addEventListener('click', () => {{
+        marca.popupOriginal = 'sim';
+        document.getElementById('popup-original').style.display = 'none';
+        setTimeout(() => {{ mascara.value = '{original}'; }}, 200);
       }});
       document.querySelector('.icon-NovoDocumento').addEventListener('click', () => mostrar('novo'));
       document.querySelector('[name=btnProsseguir]').addEventListener('click', () => {{
@@ -283,6 +299,26 @@ def test_prosseguir_que_nao_avanca_levanta_com_a_mensagem_da_tela(abrir, rapido)
     with pytest.raises(fp.ProsseguirNaoAvancou, match="Campo obrigatório"):
         fp.prosseguir_ate(page, ("#tela-seguinte",), "identificacao", diagnostico=retratos.append)
     assert retratos == ["prosseguir_nao_avancou"]
+
+
+def test_popup_de_documento_nao_original_responde_sim_e_segue_com_o_original(abrir):
+    """Usuário, 21/11/2026 (INSS, código 24): ao digitar o PER/DCOMP aparece
+    "não é um documento original. Deseja recuperar o documento original?" ->
+    "Sim" e segue. A conferência passa a usar o número recuperado."""
+    original = "11111222223333334444555566"[:24]
+    page = abrir(original=fp.formatar_perdcomp(original))
+    efetivo = fp.preencher_identificacao(page, tributo="PAGAMENTO INDEVIDO", perdcomp=PERDCOMP,
+                                         timeout=5_000)
+    assert efetivo == original
+    assert _estado(page)["popupOriginal"] == "sim"
+    conferencias = fp.conferencias_identificacao(page, tributo="PAGAMENTO INDEVIDO", perdcomp=efetivo)
+    fp.prosseguir_ate(page, ("#tela-seguinte",), "identificacao", conferencias=conferencias)
+    assert _estado(page)["perdcomp"] == fp.formatar_perdcomp(original)
+
+
+def test_sem_popup_devolve_o_perdcomp_da_planilha(abrir):
+    page = abrir()
+    assert fp.preencher_identificacao(page, tributo="PIS", perdcomp=PERDCOMP, timeout=5_000) == PERDCOMP
 
 
 def test_formatar_perdcomp():

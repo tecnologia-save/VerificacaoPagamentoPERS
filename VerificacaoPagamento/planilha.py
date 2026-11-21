@@ -132,7 +132,11 @@ def tipo_tributo(valor) -> str:
 # PER/DCOMP de código 04 (restituição de pagamento indevido) e toda linha cuja
 # coluna K não cita PIS nem COFINS (INSS, IRPJ, CSLL, IPI...).
 TRIBUTO_PAGAMENTO_INDEVIDO = "PAGAMENTO INDEVIDO"
-CODIGO_PAGAMENTO_INDEVIDO = "04"
+# 04 = restituição de pagamento indevido; 24 = INSS (usuário, 21/11/2026: o
+# mesmo "Pagamento Indevido ou a Maior", com o popup de documento original).
+CODIGOS_PAGAMENTO_INDEVIDO = ("04", "24")
+# Tipos que seguem a tela "Informar Crédito" com abas (sem o não litígio).
+TRIBUTOS_CREDITO_EM_ABAS = (TRIBUTO_PAGAMENTO_INDEVIDO,)
 
 
 def tipo_credito(tributo, perdcomp: str, *, pagamento_indevido: bool | None = None,
@@ -140,7 +144,7 @@ def tipo_credito(tributo, perdcomp: str, *, pagamento_indevido: bool | None = No
     """Opção do 1º dropdown (Tipo de Crédito): "PIS", "COFINS",
     "PAGAMENTO INDEVIDO" ou "" (fora do escopo).
 
-    - código 04 no nº do PER/DCOMP -> PAGAMENTO INDEVIDO, seja qual for a coluna K;
+    - código 04 ou 24 (INSS) no nº do PER/DCOMP -> PAGAMENTO INDEVIDO, seja qual for a K;
     - coluna K só com PIS ou só com COFINS -> esse tributo;
     - coluna K com PIS e COFINS juntos ('PIS/COFINS') ou vazia -> "" (indefinido);
     - qualquer outro texto (INSS, IRPJ, CSLL, IPI...) -> PAGAMENTO INDEVIDO.
@@ -152,7 +156,7 @@ def tipo_credito(tributo, perdcomp: str, *, pagamento_indevido: bool | None = No
         pela_coluna_k = PAGAMENTO_INDEVIDO_PELA_COLUNA_K
     if not pagamento_indevido:
         return tipo_tributo(tributo)
-    if codigo_credito(perdcomp) == CODIGO_PAGAMENTO_INDEVIDO:
+    if codigo_credito(perdcomp) in CODIGOS_PAGAMENTO_INDEVIDO:
         return TRIBUTO_PAGAMENTO_INDEVIDO
     tributo_k = tipo_tributo(tributo)
     if tributo_k:

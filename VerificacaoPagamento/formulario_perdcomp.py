@@ -723,6 +723,40 @@ def formatar_perdcomp(digitos: str) -> str:
     return f"{d[0:5]}.{d[5:10]}.{d[10:16]}.{d[16]}.{d[17]}.{d[18:20]}-{d[20:24]}"
 
 
+# Popup logo depois de digitar o PER/DCOMP (usuário, 21/11/2026 — INSS, código
+# 24): "O PER/DCOMP que contém o detalhamento do crédito não é um documento
+# original. Deseja recuperar o documento original?" -> "Sim". Sem responder, o
+# documento chega ao fim "não apto" ("... detalhamento do crédito não foi
+# localizado"). O botão "Sim" tem id próprio.
+SELETOR_SIM_RECUPERAR_ORIGINAL = "#botaoSimSubstituicaoDerivada"
+ESPERA_POPUP_ORIGINAL_MS = 1_500
+
+
+def recuperar_original_se_perguntado(page, espera_ms: int = ESPERA_POPUP_ORIGINAL_MS) -> str:
+    """Responde "Sim" ao popup "não é um documento original — recuperar o
+    original?" se ele aparecer. Devolve os 24 dígitos que ficaram no campo do
+    PER/DCOMP depois disso ("" se o popup não apareceu ou o campo não foi lido)."""
+    aguardar_pagina_pronta(page)
+    botao = _esperar_visivel(_frame(page).locator(SELETOR_SIM_RECUPERAR_ORIGINAL), espera_ms)
+    if botao is None:
+        return ""
+    print("  -> Aviso 'PER/DCOMP nao e um documento original': clicando 'Sim' (recuperar o original).")
+    try:
+        botao.click(timeout=TIMEOUT_CLIQUE_MS)
+    except Exception as e:
+        if navegador_fechou(e):
+            raise
+        botao.evaluate("(el) => el.click()")
+    _frame(page).locator(SELETOR_SIM_RECUPERAR_ORIGINAL).first.wait_for(state="hidden", timeout=30_000)
+    aguardar_pagina_pronta(page)
+    campo = _visivel_ou_none(page, SELETOR_PERDCOMP_ANTERIOR)
+    digitos = _so_digitos(_ler_input(campo)) if campo is not None else ""
+    if len(digitos) == 24:
+        print(f"  -> Documento original recuperado: {formatar_perdcomp(digitos)}.")
+        return digitos
+    return ""
+
+
 def preencher_perdcomp_anterior(page, digitos: str, timeout: int = 20_000) -> None:
     """O "Número do PER/DCOMP Anterior" (coluna M), conferido nos 24 dígitos."""
     preencher_digitando(page, SELETOR_PERDCOMP_ANTERIOR, digitos, "PER/DCOMP anterior",
@@ -1112,10 +1146,12 @@ def conferencias_identificacao(page, *, tributo: str, perdcomp: str) -> list[Con
 
 
 def preencher_identificacao(page, *, tributo: str, perdcomp: str, timeout: int = 30_000,
-                            diagnostico=None) -> None:
+                            diagnostico=None) -> str:
     """Do "Novo Documento" até o número do PER/DCOMP anterior preenchido (passos
     enviados pelo usuário em 18/11/2026). O "Prosseguir" desta tela fica com
-    `etapas_dcomp`, que sabe o que vem depois. `tributo`: "PIS", "COFINS" ou
+    `etapas_dcomp`, que sabe o que vem depois. Devolve o PER/DCOMP que ficou no
+    campo: o da planilha, ou o original recuperado pelo popup de documento
+    derivado (recuperar_original_se_perguntado). `tributo`: "PIS", "COFINS" ou
     "PAGAMENTO INDEVIDO" (planilha.tipo_credito);
     `perdcomp`: 24 dígitos (coluna M)."""
     if tributo not in TEXTO_TIPO_CREDITO:
@@ -1138,6 +1174,7 @@ def preencher_identificacao(page, *, tributo: str, perdcomp: str, timeout: int =
     print("FASE: Detalhamento do Credito -> PER/DCOMP anterior")
     selecionar(page, SELETOR_DETALHAMENTO, TEXTO_DETALHAMENTO, "Detalhamento do Credito", timeout)
     preencher_perdcomp_anterior(page, perdcomp, timeout)
+    return recuperar_original_se_perguntado(page) or perdcomp
 
 
 def responder_retificadora_nao(page, timeout: int = 20_000, diagnostico=None) -> None:

@@ -32,7 +32,8 @@ from .formulario_perdcomp import (
     preencher_identificacao,
 )
 from .navegacao import navegar_modulo_perdcomp
-from .planilha import TRIBUTO_COFINS, TRIBUTO_PAGAMENTO_INDEVIDO, TRIBUTO_PIS, LinhaPerdcomp
+from .formulario_perdcomp import TEXTO_TIPO_CREDITO
+from .planilha import TRIBUTO_COFINS, TRIBUTO_PIS, TRIBUTOS_CREDITO_EM_ABAS, LinhaPerdcomp
 
 # Pausa depois que a sonda diz que o e-CAC voltou, antes de refazer a linha.
 ESPERA_ERRO_REDE_S = 30
@@ -173,23 +174,23 @@ class PortalReal:
                 # com PIS <-> COFINS (trocar o tipo apaga os outros campos).
                 navegar_modulo_perdcomp(page)
             try:
-                preencher_identificacao(page, tributo=tributo, perdcomp=linha.perdcomp,
-                                        diagnostico=diagnostico)
+                perdcomp = preencher_identificacao(page, tributo=tributo, perdcomp=linha.perdcomp,
+                                                   diagnostico=diagnostico)
             except TelaNovoDocumentoIndisponivel:
                 # "Novo Documento" não abriu a tela (diálogo inesperado do documento
                 # anterior?). Recarrega o módulo e tenta uma vez.
                 print("  -> [AVISO] 'Novo Documento' nao abriu a tela; recarregando o modulo...")
                 diagnostico("novo_documento_nao_abriu")
                 navegar_modulo_perdcomp(page)
-                preencher_identificacao(page, tributo=tributo, perdcomp=linha.perdcomp,
-                                        diagnostico=diagnostico)
+                perdcomp = preencher_identificacao(page, tributo=tributo, perdcomp=linha.perdcomp,
+                                                   diagnostico=diagnostico)
             try:
                 desfecho = concluir_declaracao(
                     page, permitir_envio=PERMITIR_ACOES_REAIS_NO_ECAC, antes_de_enviar=antes_de_enviar,
                     diagnostico=diagnostico,
-                    pagamento_indevido=tributo == TRIBUTO_PAGAMENTO_INDEVIDO,
+                    pagamento_indevido=tributo in TRIBUTOS_CREDITO_EM_ABAS,
                     conferencias_identificacao=conferencias_identificacao(
-                        page, tributo=tributo, perdcomp=linha.perdcomp))
+                        page, tributo=tributo, perdcomp=perdcomp))
             except PerdcompCancelado:
                 # Regra do usuário (19/11/2026): AA "Perdcomp cancelado" e segue,
                 # no mesmo navegador; a próxima linha recarrega o módulo.
@@ -199,12 +200,12 @@ class PortalReal:
                                       "encontra-se cancelado.",
                                 situacao=SITUACAO_PERDCOMP_CANCELADO, tela_conhecida=False)
             except TipoCreditoDivergente:
-                if tributo == TRIBUTO_PAGAMENTO_INDEVIDO:
+                if tributo in TRIBUTOS_CREDITO_EM_ABAS:
                     # Não há "outro" para tentar (a troca é só PIS <-> COFINS).
-                    print(f"  -> [TRIBUTO] Tipo de credito 'Pagamento Indevido ou a Maior' recusado: "
+                    print(f"  -> [TRIBUTO] Tipo de credito '{TEXTO_TIPO_CREDITO[tributo]}' recusado: "
                           f"linha {linha.numero_linha} vai para a AA e a execucao segue.")
                     return Desfecho(True, f"{SITUACAO_TIPO_CREDITO_DIVERGENTE} (recusado como "
-                                          "Pagamento Indevido ou a Maior)",
+                                          f"{TEXTO_TIPO_CREDITO[tributo]})",
                                     situacao=SITUACAO_TIPO_CREDITO_DIVERGENTE,
                                     tela_conhecida=False)
                 if tentativa == 2:

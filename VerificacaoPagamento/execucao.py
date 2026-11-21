@@ -55,7 +55,7 @@ from .desfechos import (
 )
 from .formulario_perdcomp import navegador_fechou
 from .planilha import (
-    TRIBUTO_PAGAMENTO_INDEVIDO,
+    TRIBUTOS_CREDITO_EM_ABAS,
     DadosPlanilha,
     GrupoCertificado,
     codigo_credito,
@@ -219,7 +219,7 @@ def preparar_lote(dados: DadosPlanilha, limite: int | None, pfx_disponiveis: dic
             tributo_fora[linha.tributo.strip() or "(vazio)"] += 1
         elif len(linha.perdcomp) != 24 or not linha.perdcomp.isdigit():
             perdcomp_invalido.append(linha.numero_linha)
-        elif (linha.tipo_credito != TRIBUTO_PAGAMENTO_INDEVIDO
+        elif (linha.tipo_credito not in TRIBUTOS_CREDITO_EM_ABAS
               and codigo_credito(linha.perdcomp) not in CODIGOS_CREDITO_ATENDIDOS):
             credito_fora[codigo_credito(linha.perdcomp)] += 1
         elif linha.perdcomp in vistos:
@@ -249,8 +249,8 @@ def preparar_lote(dados: DadosPlanilha, limite: int | None, pfx_disponiveis: dic
     if tributo_fora:
         valores = ", ".join(f"'{v}' ({q})" for v, q in tributo_fora.most_common(6))
         avisos.append(f"{sum(tributo_fora.values())} linha(s) com tributo fora de PIS/COFINS na "
-                      f"coluna K (Pagamento Indevido ainda não automatizado; ou K vazia, ou PIS e "
-                      f"COFINS juntos) foram puladas: {valores}.")
+                      f"coluna K (K vazia, PIS e COFINS juntos, ou outro tributo sem PER/DCOMP de "
+                      f"código 04/24) foram puladas: {valores}.")
     if credito_fora:
         valores = ", ".join(f"'{c}' ({q})" for c, q in credito_fora.most_common(6))
         avisos.append(f"{sum(credito_fora.values())} linha(s) com PER/DCOMP de outro tipo de "

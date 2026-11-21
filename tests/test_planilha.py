@@ -151,6 +151,8 @@ def test_status_z_permitido():
     ("PIS", "04", "PAGAMENTO INDEVIDO"),         # código 04 manda, seja qual for a coluna K
     ("PIS/COFINS", "04", "PAGAMENTO INDEVIDO"),
     ("", "04", "PAGAMENTO INDEVIDO"),
+    ("INSS", "24", "PAGAMENTO INDEVIDO"),        # INSS = código 24 (21/11/2026)
+    ("", "24", "PAGAMENTO INDEVIDO"),
     ("INSS", "19", "PAGAMENTO INDEVIDO"),        # sem PIS nem COFINS (20/11/2026)
     ("IRPJ", "18", "PAGAMENTO INDEVIDO"),
     ("CSLL", "04", "PAGAMENTO INDEVIDO"),
@@ -162,8 +164,8 @@ def test_tipo_credito(tributo, codigo, esperado):
     from VerificacaoPagamento.planilha import tipo_credito
     perdcomp = "1" * 18 + codigo + "0" * 4
     assert tipo_credito(tributo, perdcomp, pagamento_indevido=True, pela_coluna_k=True) == esperado
-    # pela coluna K desligado: só o código 04 vira Pagamento Indevido
-    so_04 = esperado if codigo == "04" or esperado != "PAGAMENTO INDEVIDO" else ""
+    # pela coluna K desligado: só os códigos 04/24 viram Pagamento Indevido
+    so_04 = esperado if codigo in ("04", "24") or esperado != "PAGAMENTO INDEVIDO" else ""
     assert tipo_credito(tributo, perdcomp, pagamento_indevido=True, pela_coluna_k=False) == so_04
     # desligado: só a coluna K
     assert tipo_credito(tributo, perdcomp, pagamento_indevido=False) == tipo_tributo(tributo)
