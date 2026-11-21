@@ -36,7 +36,7 @@ from openpyxl import load_workbook
 from .config import (
     PAGAMENTO_INDEVIDO_ATIVO,
     PAGAMENTO_INDEVIDO_PELA_COLUNA_K,
-    SITUACAO_MENSAGENS_IMPORTANTES,
+    SITUACOES_NAO_RESULTADO,
 )
 
 # Colunas lidas (letra -> campo). A coluna AA é a SAÍDA da automação.
@@ -226,10 +226,11 @@ class LinhaPerdcomp:
     def pendente(self) -> bool:
         """Pendente = coluna AA vazia. Qualquer resultado gravado ali (inclusive
         "Verificar no e-CAC") tira a linha das próximas execuções — menos a
-        marca de mensagens importantes não lidas, que não é resultado: com a
-        regra de 19/11/2026 a automação abre as mensagens e refaz a linha."""
+        marca de mensagens importantes não lidas e a de limite de rascunhos,
+        que não são resultado (config.SITUACOES_NAO_RESULTADO): a automação
+        abre as mensagens / exclui os rascunhos dela e refaz a linha."""
         situacao = self.situacao_verificacao.strip()
-        return not situacao or situacao == SITUACAO_MENSAGENS_IMPORTANTES
+        return not situacao or situacao in SITUACOES_NAO_RESULTADO
 
 
 @dataclass

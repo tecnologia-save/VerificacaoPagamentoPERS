@@ -121,6 +121,9 @@ SITUACAO_PROTOCOLADA = "Pagamento não realizado, protocolação feita"
 # (a regra antiga: marca a linha, Sair com Segurança e próxima empresa) — e
 # NÃO é resultado: a linha volta ao lote na próxima execução.
 SITUACAO_MENSAGENS_IMPORTANTES = "Mensagens importantes não lidas na Caixa Postal"
+# Marcas na AA que NÃO são resultado: a linha continua pendente (volta ao lote)
+# e o diário não as espalha para outras linhas do mesmo PER/DCOMP.
+# (SITUACAO_LIMITE_RASCUNHOS é definida mais abaixo; a tupla fica no fim.)
 # Aba da planilha com uma linha por mensagem importante aberta pela automação.
 ABA_MENSAGENS_ABERTAS = "Mensagens importantes abertas"
 SITUACAO_TIPO_CREDITO_DIVERGENTE = ("Tipo do crédito informado neste documento diferente do "
@@ -134,14 +137,20 @@ SITUACAO_PERDCOMP_CANCELADO = "Perdcomp cancelado"
 # do usuário, 19/11/2026): grava isto na AA das linhas da empresa e segue.
 SITUACAO_SEM_PERMISSAO = "Procuração sem poder para PER/DCOMP"
 # "Excedido o número de rascunhos permitidos pelo sistema" (20/11/2026): a
-# empresa não cria documento novo até alguém excluir rascunhos no PER/DCOMP —
-# refazer não adianta. Vai para a AA das linhas da empresa e segue.
+# empresa não cria documento novo até alguém excluir rascunhos no PER/DCOMP.
+# Regra do usuário (21/11/2026): a automação exclui 10 rascunhos (os dela
+# primeiro, depois quaisquer outros — ver rascunhos.py) e refaz a linha.
 TEXTO_LIMITE_RASCUNHOS = "excedido o número de rascunhos"
+# Não deu para excluir agora (erro na tela): NÃO é resultado — a linha volta ao
+# lote na próxima execução. É também a marca antiga (antes da exclusão
+# automática): as linhas marcadas com ela voltam sozinhas.
 SITUACAO_LIMITE_RASCUNHOS = "Limite de rascunhos excedido no PER/DCOMP (excluir rascunhos)"
 # "Enviar" clicado sem desfecho confirmado: NÃO se sabe se a Declaração foi
 # transmitida. A linha fica fora de todas as execuções até alguém conferir no
 # e-CAC — reenviar poderia gerar uma segunda Declaração de Compensação.
 SITUACAO_VERIFICAR = "Verificar no e-CAC (envio sem confirmação)"
+
+SITUACOES_NAO_RESULTADO = (SITUACAO_MENSAGENS_IMPORTANTES, SITUACAO_LIMITE_RASCUNHOS)
 
 # Teto de envios sem confirmação por execução (None = não para). Pedido do
 # usuário (18/11/2026): rodar 24 h sem parar. Cada envio sem confirmação

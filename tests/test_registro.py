@@ -71,13 +71,18 @@ def test_mensagem_so_no_diario_entra_na_aba_na_proxima_execucao(tmp_path, planil
     assert novo.reconciliar_mensagens() == 0                    # já está na aba
 
 
-def test_marca_de_mensagens_importantes_nao_tira_a_linha_do_lote(registro, planilha):
-    from VerificacaoPagamento.config import SITUACAO_MENSAGENS_IMPORTANTES
+@pytest.mark.parametrize("marca", ["Mensagens importantes não lidas na Caixa Postal",
+                                   "Limite de rascunhos excedido no PER/DCOMP (excluir rascunhos)"])
+def test_marca_que_nao_e_resultado_nao_tira_a_linha_do_lote(registro, planilha, marca):
+    """Mensagens importantes (19/11/2026) e limite de rascunhos (21/11/2026: a
+    automação passou a excluir os rascunhos dela — as linhas já marcadas voltam)."""
+    from VerificacaoPagamento.config import SITUACOES_NAO_RESULTADO
 
+    assert marca in SITUACOES_NAO_RESULTADO
     dados = ler_planilha(planilha)
-    registro.registrar(dados.linhas[0], SITUACAO_MENSAGENS_IMPORTANTES, "aviso")
+    registro.registrar(dados.linhas[0], marca, "aviso")
     dados = ler_planilha(planilha)
-    assert dados.linhas[0].situacao_verificacao == SITUACAO_MENSAGENS_IMPORTANTES
+    assert dados.linhas[0].situacao_verificacao == marca
     assert dados.linhas[0].pendente
     # e a reconciliação não a "repõe" nem espalha para outras linhas
     assert registro.reconciliar(dados) == 0

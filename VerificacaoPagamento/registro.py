@@ -36,9 +36,9 @@ from pathlib import Path
 
 from .config import (
     ABA_MENSAGENS_ABERTAS,
-    SITUACAO_MENSAGENS_IMPORTANTES,
     SITUACAO_PROTOCOLADA,
     SITUACAO_VERIFICAR,
+    SITUACOES_NAO_RESULTADO,
 )
 from .desfechos import numero_documento
 from .planilha import (
@@ -237,7 +237,7 @@ class RegistroResultados:
         conhecidos: dict[str, str] = {}
 
         def _guardar(perdcomp: str, situacao: str) -> None:
-            if not perdcomp or not situacao or situacao == SITUACAO_MENSAGENS_IMPORTANTES:
+            if not perdcomp or not situacao or situacao in SITUACOES_NAO_RESULTADO:
                 return
             atual = conhecidos.get(perdcomp)
             if atual is None or (atual == SITUACAO_VERIFICAR and situacao != SITUACAO_VERIFICAR):
@@ -266,8 +266,8 @@ class RegistroResultados:
                 continue
             situacao = (finais.get((linha.numero_linha, linha.perdcomp))
                         or por_perdcomp.get(linha.perdcomp))
-            # A marca de mensagens importantes não é resultado (a linha é refeita).
-            if situacao and situacao != SITUACAO_MENSAGENS_IMPORTANTES:
+            # Mensagens importantes / limite de rascunhos não são resultado (a linha é refeita).
+            if situacao and situacao not in SITUACOES_NAO_RESULTADO:
                 linha.situacao_verificacao = situacao
                 with self._trava:
                     self._a_gravar[linha.numero_linha] = (linha.perdcomp, situacao)

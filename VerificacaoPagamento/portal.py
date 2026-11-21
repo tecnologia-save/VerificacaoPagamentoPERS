@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 
 from . import caixa_postal as _caixa_postal
+from . import rascunhos as _rascunhos
 from . import sessao as _sessao
 from .certificados import Certificado
 from .config import (
@@ -113,6 +114,17 @@ class PortalReal:
     # ── PER/DCOMP ────────────────────────────────────────────────────────────
     def abrir_modulo(self, sessao: _sessao.Sessao) -> None:
         navegar_modulo_perdcomp(sessao.page)
+
+    def excluir_rascunhos(self, sessao: _sessao.Sessao) -> int:
+        """Limite de rascunhos: exclui até 10 rascunhos, os da automação
+        primeiro (regra do usuário, 21/11/2026 — ver rascunhos.py). Devolve quantos."""
+        try:
+            return _rascunhos.excluir_rascunhos(
+                sessao.page, diagnostico=lambda rotulo: self.capturar(sessao, rotulo))
+        except Exception as e:
+            if not navegador_fechou(e):
+                self.capturar(sessao, "rascunhos_erro")
+            raise
 
     def processar_linha(self, sessao: _sessao.Sessao, linha: LinhaPerdcomp, *,
                         antes_de_enviar=None) -> Desfecho:

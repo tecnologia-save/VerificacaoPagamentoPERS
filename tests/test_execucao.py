@@ -293,28 +293,76 @@ def test_rede_na_troca_de_perfil_reabre_o_navegador_e_nao_descarta_a_empresa():
     assert portal.esperas == 1
 
 
-def test_limite_de_rascunhos_marca_a_empresa_e_segue_sem_retentativas():
-    from VerificacaoPagamento.config import SITUACAO_LIMITE_RASCUNHOS
+def _portal_com_limite_de_rascunhos(*, excluidos=None, erro=None, limite_vezes=1):
+    """CNPJ_A bate no limite de rascunhos `limite_vezes` vezes; `excluidos`
+    (int) / `erro` (exceção) = o que a exclusão devolve; None = portal sem
+    exclusão."""
     from VerificacaoPagamento.formulario_perdcomp import ProsseguirNaoAvancou
 
-    lote = _lote([(_linha(2, CNPJ_A), "Save"), (_linha(3, CNPJ_A), "Save"),
-                  (_linha(4, CNPJ_B), "Save")])
-
     class Portal(PortalFalso):
+        restantes = limite_vezes
+
         def processar_linha(self, sessao, linha, **kw):
-            if sessao.perfil_real == CNPJ_A:
+            if sessao.perfil_real == CNPJ_A and self.restantes > 0:
+                self.restantes -= 1
                 self.eventos.append(("linha", linha.numero_linha, sessao.perfil_real))
                 raise ProsseguirNaoAvancou("a tela nao avancou: Excedido o número de rascunhos "
                                            "permitidos pelo sistema.")
             return super().processar_linha(sessao, linha, **kw)
 
-    portal = Portal()
+    if excluidos is not None or erro is not None:
+        def excluir_rascunhos(self, sessao):
+            self.eventos.append(("rascunhos", sessao.perfil_real))
+            if erro is not None:
+                raise erro
+            return excluidos
+        Portal.excluir_rascunhos = excluir_rascunhos
+    return Portal()
+
+
+def _lote_rascunhos():
+    return _lote([(_linha(2, CNPJ_A), "Save"), (_linha(3, CNPJ_A), "Save"),
+                  (_linha(4, CNPJ_B), "Save")])
+
+
+def test_limite_de_rascunhos_exclui_os_da_automacao_e_refaz_a_linha():
+    """Regra do usuário (21/11/2026): exclui 10 rascunhos e segue normalmente."""
+    portal = _portal_com_limite_de_rascunhos(excluidos=3)
     registro = RegistroFalso()
-    resultados = _resultado(executar(lote, portal, registro=registro))
+    resultados = _resultado(executar(_lote_rascunhos(), portal, registro=registro))
+    assert all(resultados[n][0] for n in (2, 3, 4))
+    assert portal.tipos("rascunhos") == [(CNPJ_A,)]
+    assert portal.tipos("linha") == [(2, CNPJ_A), (2, CNPJ_A), (3, CNPJ_A), (4, CNPJ_B)]
+    assert not [a for a in registro.anotacoes if "rascunhos" in a[0]]
+
+
+@pytest.mark.parametrize("excluidos,erro", [(None, RuntimeError("lixeira nao apareceu")),
+                                            (0, None), (None, None)])
+def test_limite_de_rascunhos_sem_conseguir_excluir_volta_ao_lote(excluidos, erro):
+    """Erro na exclusão, lista vazia (ou portal sem exclusão): a marca, que
+    não é resultado — a linha conta como falha e volta na próxima execução."""
+    from VerificacaoPagamento.config import SITUACAO_LIMITE_RASCUNHOS
+
+    portal = _portal_com_limite_de_rascunhos(excluidos=excluidos, erro=erro)
+    registro = RegistroFalso()
+    resultados = _resultado(executar(_lote_rascunhos(), portal, registro=registro))
     assert (SITUACAO_LIMITE_RASCUNHOS, 2) in registro.anotacoes
     assert (SITUACAO_LIMITE_RASCUNHOS, 3) in registro.anotacoes
-    assert all(resultados[n][0] for n in (2, 3, 4))
-    assert portal.tipos("linha") == [(2, CNPJ_A), (4, CNPJ_B)]   # uma vez só, sem retentativas
+    assert not resultados[2][0] and not resultados[3][0]
+    assert resultados[4][0]
+    assert portal.tipos("linha") == [(2, CNPJ_A), (4, CNPJ_B)]
+
+
+def test_limite_de_rascunhos_que_volta_depois_de_excluir_nao_entra_em_laco():
+    from VerificacaoPagamento.config import SITUACAO_LIMITE_RASCUNHOS
+
+    portal = _portal_com_limite_de_rascunhos(excluidos=2, limite_vezes=99)
+    registro = RegistroFalso()
+    resultados = _resultado(executar(_lote_rascunhos(), portal, registro=registro))
+    assert portal.tipos("rascunhos") == [(CNPJ_A,)]                  # uma exclusão por linha
+    assert portal.tipos("linha") == [(2, CNPJ_A), (2, CNPJ_A), (4, CNPJ_B)]
+    assert (SITUACAO_LIMITE_RASCUNHOS, 3) in registro.anotacoes
+    assert not resultados[2][0]
 
 
 def test_troca_que_nao_trocou_faz_login_novo_e_nunca_preenche_no_cnpj_errado():

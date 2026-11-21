@@ -371,16 +371,17 @@ def executar(lote: Lote, portal, *, checkpoint=None, registro=None,
             resultados.append(ResultadoLinha(linha.numero_linha, linha.rotulo, False, detalhe))
 
     def _encerrar_empresa(empresa, indice_linha: int, linha: LinhaPerdcomp, posicao: int,
-                          situacao: str, motivo: str) -> int:
+                          situacao: str, motivo: str, *, ok: bool = True) -> int:
         """`situacao` na AA desta linha e das seguintes da empresa (que fica
-        para trás). Devolve a posição atualizada."""
+        para trás). Devolve a posição atualizada. `ok=False` para marca que
+        não é resultado (a linha volta ao lote): conta como falha no passe."""
         print(f"  -> [{situacao.upper()}] {empresa.empresa.strip() or empresa.cnpj}: "
               f"{motivo[:160]}. Linhas da empresa marcadas; proxima empresa.")
         for outra in empresa.linhas[indice_linha:]:
             _registrar(outra, situacao, motivo)
             if outra is not linha:
                 posicao += 1
-            resultados.append(ResultadoLinha(outra.numero_linha, outra.rotulo, True, situacao))
+            resultados.append(ResultadoLinha(outra.numero_linha, outra.rotulo, ok, situacao))
         return posicao
 
     def _largar_sessao(*, morta: bool = False) -> None:
@@ -597,6 +598,7 @@ def executar(lote: Lote, portal, *, checkpoint=None, registro=None,
                     esperas_rede = 0
                     bloqueada = ""
                     sem_permissao = False
+                    rascunhos_excluidos = False
                     while True:
                         try:
                             if not modulo_aberto:
@@ -657,9 +659,30 @@ def executar(lote: Lote, portal, *, checkpoint=None, registro=None,
                         except Exception as e:  # noqa: BLE001 — falha só desta linha
                             if TEXTO_LIMITE_RASCUNHOS in " ".join(str(e).split()).casefold():
                                 portal.capturar(sessao, f"limite_rascunhos_{linha.numero_linha}")
-                                posicao = _encerrar_empresa(empresa, indice_linha, linha, posicao,
-                                                            SITUACAO_LIMITE_RASCUNHOS, str(e))
                                 modulo_aberto = False
+                                # Regra do usuário (21/11/2026): exclui 10 rascunhos
+                                # e refaz a linha (uma exclusão por linha).
+                                excluir = getattr(portal, "excluir_rascunhos", None)
+                                excluidos, falhou = 0, excluir is None or rascunhos_excluidos
+                                if not falhou:
+                                    rascunhos_excluidos = True
+                                    try:
+                                        excluidos = excluir(sessao)
+                                    except Exception as e2:  # noqa: BLE001 — a linha volta depois
+                                        falhou = True
+                                        print(f"  -> [RASCUNHOS] Nao foi possivel excluir: "
+                                              f"{type(e2).__name__}: {str(e2)[:160]}")
+                                        if navegador_fechou(e2):
+                                            _largar_sessao(morta=True)
+                                if excluidos and sessao is not None:
+                                    print(f"  -> [RASCUNHOS] {excluidos} rascunho(s) excluido(s); "
+                                          f"refazendo a linha {linha.numero_linha} — nada foi enviado.")
+                                    continue
+                                # Não excluiu (erro, lista vazia, ou o limite voltou):
+                                # não é resultado — a linha volta ao lote depois.
+                                posicao = _encerrar_empresa(empresa, indice_linha, linha, posicao,
+                                                            SITUACAO_LIMITE_RASCUNHOS, str(e),
+                                                            ok=False)
                                 sem_permissao = True
                                 break
                             if isinstance(e, EnvioRecusadoPeloServidor) and registro is not None:
