@@ -443,6 +443,7 @@ def test_preparar_lote_filtra_e_agrega_os_problemas(tmp_path, monkeypatch):
     from tests.test_certificados import _pfx
     from VerificacaoPagamento import planilha
     monkeypatch.setattr(planilha, "PAGAMENTO_INDEVIDO_ATIVO", True)
+    monkeypatch.setattr(planilha, "PAGAMENTO_INDEVIDO_PELA_COLUNA_K", True)
 
     _pfx(tmp_path / "Save Inteligência.pfx", "s")
     _pfx(tmp_path / "D&S.pfx", "s")

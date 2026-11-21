@@ -175,6 +175,7 @@ class PortalReal:
                 desfecho = concluir_declaracao(
                     page, permitir_envio=PERMITIR_ACOES_REAIS_NO_ECAC, antes_de_enviar=antes_de_enviar,
                     diagnostico=diagnostico,
+                    pagamento_indevido=tributo == TRIBUTO_PAGAMENTO_INDEVIDO,
                     conferencias_identificacao=conferencias_identificacao(
                         page, tributo=tributo, perdcomp=linha.perdcomp))
             except PerdcompCancelado:

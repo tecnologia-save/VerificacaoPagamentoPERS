@@ -33,7 +33,11 @@ from typing import Any
 
 from openpyxl import load_workbook
 
-from .config import PAGAMENTO_INDEVIDO_ATIVO, SITUACAO_MENSAGENS_IMPORTANTES
+from .config import (
+    PAGAMENTO_INDEVIDO_ATIVO,
+    PAGAMENTO_INDEVIDO_PELA_COLUNA_K,
+    SITUACAO_MENSAGENS_IMPORTANTES,
+)
 
 # Colunas lidas (letra -> campo). A coluna AA é a SAÍDA da automação.
 COLUNA_PARCEIRO = "A"
@@ -131,7 +135,8 @@ TRIBUTO_PAGAMENTO_INDEVIDO = "PAGAMENTO INDEVIDO"
 CODIGO_PAGAMENTO_INDEVIDO = "04"
 
 
-def tipo_credito(tributo, perdcomp: str, *, pagamento_indevido: bool | None = None) -> str:
+def tipo_credito(tributo, perdcomp: str, *, pagamento_indevido: bool | None = None,
+                 pela_coluna_k: bool | None = None) -> str:
     """Opção do 1º dropdown (Tipo de Crédito): "PIS", "COFINS",
     "PAGAMENTO INDEVIDO" ou "" (fora do escopo).
 
@@ -143,6 +148,8 @@ def tipo_credito(tributo, perdcomp: str, *, pagamento_indevido: bool | None = No
     só a coluna K: "PIS", "COFINS" ou ""."""
     if pagamento_indevido is None:
         pagamento_indevido = PAGAMENTO_INDEVIDO_ATIVO
+    if pela_coluna_k is None:
+        pela_coluna_k = PAGAMENTO_INDEVIDO_PELA_COLUNA_K
     if not pagamento_indevido:
         return tipo_tributo(tributo)
     if codigo_credito(perdcomp) == CODIGO_PAGAMENTO_INDEVIDO:
@@ -151,7 +158,7 @@ def tipo_credito(tributo, perdcomp: str, *, pagamento_indevido: bool | None = No
     if tributo_k:
         return tributo_k
     palavras = set(normalizar_texto(tributo).split())
-    if not palavras or "pis" in palavras or "cofins" in palavras:
+    if not pela_coluna_k or not palavras or "pis" in palavras or "cofins" in palavras:
         return ""
     return TRIBUTO_PAGAMENTO_INDEVIDO
 

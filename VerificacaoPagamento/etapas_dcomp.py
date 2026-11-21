@@ -87,6 +87,13 @@ SELETOR_TERMO = "input[name='termoAceito']"
 SELETOR_OK_TERMO = "#botaoOkTermoAceito"
 SELETOR_LITIGIO = "input[formcontrolname='litigioProcJudicial']"
 SELETOR_CREDITO_ORIGINAL = "#creditoOriginalDataEntrega"
+# Pagamento Indevido ou a Maior (passos do usuário, 20/11/2026): depois do termo
+# vem "Informar Crédito" com abas — Identificação do Crédito (campos travados,
+# "Detentor do Crédito" = #detentor) -> Prosseguir -> Detalhamento do Crédito ->
+# Prosseguir -> Demonstrativo (#creditoOriginalDataEntrega = 10,00) -> Prosseguir
+# -> "Informar Débito" como no PIS/COFINS. Não há o checkbox de não litígio.
+SELETOR_DETENTOR = "#detentor"
+SELETOR_ABA_DETALHAMENTO = "li.tab.active:has-text('Detalhamento do Crédito')"
 SELETOR_INFORMAR_DEBITO = "button[name='btnIncluir']"
 SELETOR_GRUPO_TRIBUTO = "#grupoTributo"
 SELETOR_TIPO_DEBITO = "#tipoDebito"
@@ -225,8 +232,11 @@ def responder_recuperar_original(page) -> bool:
     return False
 
 
-def termo_e_litigio(page, diagnostico=None, conferencias_identificacao=()) -> None:
-    """Passos 1-2: "Prosseguir" da identificação, termo "Não" + OK, checkbox."""
+def termo_e_litigio(page, diagnostico=None, conferencias_identificacao=(), *,
+                    pagamento_indevido: bool = False) -> None:
+    """Passos 1-2: "Prosseguir" da identificação, termo "Não" + OK, checkbox
+    (no Pagamento Indevido não há checkbox: o termo leva a "Informar Crédito")."""
+    proxima = (SELETOR_DETENTOR,) if pagamento_indevido else (SELETOR_LITIGIO,)
     respostas_original = [0]
 
     def _tipo_divergente() -> bool:
@@ -243,7 +253,7 @@ def termo_e_litigio(page, diagnostico=None, conferencias_identificacao=()) -> No
             respostas_original[0] += 1
         return _cancelado() or _tipo_divergente()
 
-    apareceu = prosseguir_ate(page, (SELETOR_TERMO, SELETOR_LITIGIO), "identificacao",
+    apareceu = prosseguir_ate(page, (SELETOR_TERMO, *proxima), "identificacao",
                               conferencias=conferencias_identificacao, diagnostico=diagnostico,
                               parar_se=_vigiar)
     if not apareceu and _cancelado():
@@ -255,19 +265,30 @@ def termo_e_litigio(page, diagnostico=None, conferencias_identificacao=()) -> No
         frame = _frame(page)
         _responder_termo_nao(page, diagnostico)
         avancar(page, lambda: clicar_botao(frame, SELETOR_OK_TERMO, descricao="'OK' do termo"),
-                (SELETOR_LITIGIO,), "'OK' do termo",
+                proxima, "'OK' do termo",
                 conferencias=[conf_radio(page, lambda: _localizar_nao_termo(page), SELETOR_TERMO,
                                          "Termo = Nao", lambda: _responder_termo_nao(page))],
                 diagnostico=diagnostico, rotulo_diagnostico="termo_nao_fechou")
+    if pagamento_indevido:
+        return
     print("FASE: Declaracao de nao litigio")
     marcar_checkbox_confirmado(page, SELETOR_LITIGIO, "Nao litigio judicial/administrativo")
 
 
-def credito_original(page, diagnostico=None) -> None:
+def credito_original(page, diagnostico=None, *, pagamento_indevido: bool = False) -> None:
     """Passo 3."""
-    prosseguir_ate(page, (SELETOR_CREDITO_ORIGINAL,), "nao litigio",
-                   conferencias=[conf_checkbox(page, SELETOR_LITIGIO, "Nao litigio")],
-                   diagnostico=diagnostico)
+    if pagamento_indevido:
+        print("FASE: Informar Credito -> Identificacao do Credito")
+        apareceu = prosseguir_ate(page, (SELETOR_ABA_DETALHAMENTO, SELETOR_CREDITO_ORIGINAL),
+                                  "identificacao do credito", diagnostico=diagnostico)
+        if apareceu == SELETOR_ABA_DETALHAMENTO:
+            print("FASE: Informar Credito -> Detalhamento do Credito")
+            prosseguir_ate(page, (SELETOR_CREDITO_ORIGINAL,), "detalhamento do credito",
+                           diagnostico=diagnostico)
+    else:
+        prosseguir_ate(page, (SELETOR_CREDITO_ORIGINAL,), "nao litigio",
+                       conferencias=[conf_checkbox(page, SELETOR_LITIGIO, "Nao litigio")],
+                       diagnostico=diagnostico)
     print("FASE: Credito Original na Data de Entrega")
     preencher_valor_confirmado(page, SELETOR_CREDITO_ORIGINAL, CREDITO_ORIGINAL_DATA_ENTREGA,
                                "Credito Original na Data de Entrega")
@@ -578,11 +599,14 @@ def enviar(page, *, antes_de_enviar=None, diagnostico=None) -> Desfecho:
 
 
 def concluir_declaracao(page, *, permitir_envio: bool, antes_de_enviar=None,
-                        diagnostico=None, conferencias_identificacao=()) -> Desfecho:
+                        diagnostico=None, conferencias_identificacao=(),
+                        pagamento_indevido: bool = False) -> Desfecho:
     """Passos 1-7, com a identificação já preenchida. `conferencias_identificacao`:
-    o que a identificação informou, relido antes do primeiro "Prosseguir"."""
-    termo_e_litigio(page, diagnostico, conferencias_identificacao)
-    credito_original(page, diagnostico)
+    o que a identificação informou, relido antes do primeiro "Prosseguir".
+    `pagamento_indevido`: tipo de crédito "Pagamento Indevido ou a Maior"."""
+    termo_e_litigio(page, diagnostico, conferencias_identificacao,
+                    pagamento_indevido=pagamento_indevido)
+    credito_original(page, diagnostico, pagamento_indevido=pagamento_indevido)
     informar_debito(page, diagnostico)
     responsavel(page, diagnostico)
     if not documento_apto(page, diagnostico):

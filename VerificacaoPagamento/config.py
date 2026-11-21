@@ -72,10 +72,16 @@ APELIDOS_CERTIFICADO = {
 # linhas de "Pagamento Indevido ou a Maior" (planilha.tipo_credito), quando ligado.
 CODIGOS_CREDITO_ATENDIDOS = ("18", "19")
 # Regra do usuário (20/11/2026): código 04 e coluna K sem PIS nem COFINS ->
-# "Pagamento Indevido ou a Maior". DESLIGADO: a tela "Informar Crédito" desse
-# tipo (abas Identificação / Detalhamento / Demonstrativo, sem o checkbox de
-# não litígio) ainda não está mapeada no fluxo (etapas_dcomp).
-PAGAMENTO_INDEVIDO_ATIVO = False
+# "Pagamento Indevido ou a Maior". A tela "Informar Crédito" desse tipo tem abas
+# (Identificação / Detalhamento / Demonstrativo) e não tem o checkbox de não
+# litígio: etapas_dcomp.credito_original(pagamento_indevido=True).
+PAGAMENTO_INDEVIDO_ATIVO = True
+# Coluna K sem PIS nem COFINS (INSS, IRPJ...) com PER/DCOMP de OUTRO código que
+# não o 04. DESLIGADO: teste em modo seguro de 20/11/2026 (linha 1772, INSS,
+# código 24): "O PER/DCOMP que contém o detalhamento do crédito não foi
+# localizado" -> não apto. O código 24 não é Pagamento Indevido (provavelmente
+# "Contribuição Previdenciária Indevida ou a Maior"); o usuário vai decidir.
+PAGAMENTO_INDEVIDO_PELA_COLUNA_K = False
 
 PROCURADORES_IGNORADOS = ("ELIANE",)
 

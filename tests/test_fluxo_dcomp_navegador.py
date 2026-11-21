@@ -63,6 +63,11 @@ _HTML = """<!doctype html><html><head><style>
   <label class="control control--radio">Não <input type="radio" formcontrolname="termoAceito" name="termoAceito"><div class="control__indicator"></div></label>
   </div><button id="botaoOkTermoAceito" type="button" class="botaoModal">OK</button></div>
 <div id="tela-litigio" class="oculto"><label><input type="checkbox" formcontrolname="litigioProcJudicial"> O Contribuinte não está litigando em Processo Judicial ou Administrativo sobre matéria que possa alterar o valor a ser Ressarcido/Compensado</label></div>
+<div id="tela-ci" class="oculto"><ul>
+  <li class="tab active" id="Identificação do Crédito"><a tabindex="0">Identificação do Crédito</a></li>
+  <li class="tab" id="Detalhamento do Crédito"><a tabindex="0">Detalhamento do Crédito</a></li>
+  <li class="tab" id="Demonstrativo do Crédito"><a tabindex="0">Demonstrativo do Crédito</a></li></ul>
+  <div id="ci-ident"><select formcontrolname="titularidade" id="detentor" disabled="true"><option>Crédito apurado pelo próprio contribuinte</option></select></div></div>
 <div id="tela-credito" class="oculto"><input type="text" perdcompcurrency="" maxlength="18" formcontrolname="creditoOriginalDataEntrega" id="creditoOriginalDataEntrega"></div>
 <div id="tela-debitos" class="oculto"><button name="btnIncluir" type="button">Informar Débito</button>
   <div id="form-debito" class="oculto">
@@ -122,8 +127,11 @@ document.querySelectorAll('#modal-termo input').forEach(i => i.addEventListener(
 }));
 $('#botaoOkTermoAceito').addEventListener('click', () => {
   if (m.termo !== 'Não') return;
-  esconder('modal-termo'); mostrar('tela-litigio'); m.etapa = 'litigio';
+  esconder('modal-termo');
+  if (txt('tipoCredito') === 'Pagamento Indevido ou a Maior') { mostrar('tela-ci'); m.etapa = 'ci1'; }
+  else { mostrar('tela-litigio'); m.etapa = 'litigio'; }
 });
+const aba = (n) => document.querySelectorAll('#tela-ci li.tab').forEach((li, i) => li.classList.toggle('active', i === n));
 $('[name=btnIncluir]').addEventListener('click', () => mostrar('form-debito'));
 let apagouVencimento = false;
 $('#dataVencimento').addEventListener('blur', () => {
@@ -173,6 +181,10 @@ $('[name=btnProsseguir]').addEventListener('click', () => {
     }
     esconder('novo'); m.etapa = 'termo';
     if (__COM_TERMO__) mostrar('modal-termo'); else { mostrar('tela-litigio'); m.etapa = 'litigio'; }
+  } else if (m.etapa === 'ci1') {
+    setTimeout(() => { aba(1); esconder('ci-ident'); m.etapa = 'ci2'; }, 300);
+  } else if (m.etapa === 'ci2') {
+    setTimeout(() => { aba(2); mostrar('tela-credito'); m.etapa = 'credito'; m.passouCi = '1'; }, 300);
   } else if (m.etapa === 'litigio') {
     const c = $('[formcontrolname=litigioProcJudicial]');
     if (!c.checked) { msg('Marque a declaração.'); return; }
@@ -180,7 +192,7 @@ $('[name=btnProsseguir]').addEventListener('click', () => {
   } else if (m.etapa === 'credito') {
     m.credito = $('#creditoOriginalDataEntrega').value;
     if (!m.credito) { msg('Informe o crédito.'); return; }
-    esconder('tela-credito'); mostrar('tela-debitos'); m.etapa = 'debitos';
+    esconder('tela-credito'); esconder('tela-ci'); mostrar('tela-debitos'); m.etapa = 'debitos';
   } else if (m.etapa === 'debitos') {
     if (m.debitoConfirmado !== '1') { msg('Informe um débito.'); return; }
     esconder('tela-debitos'); mostrar('tela-responsavel'); m.etapa = 'responsavel';
@@ -266,6 +278,22 @@ def _declaracao(page, **kwargs):
     return et.concluir_declaracao(
         page, conferencias_identificacao=fp.conferencias_identificacao(
             page, tributo="COFINS", perdcomp=PERDCOMP), **kwargs)
+
+
+def test_pagamento_indevido_passa_pelas_abas_do_credito_sem_litigio(abrir):
+    """Passos do usuário (20/11/2026): termo -> Prosseguir (Identificação do
+    Crédito) -> Prosseguir (Detalhamento) -> 10,00 -> Prosseguir -> débito."""
+    page = abrir(desfecho="enviado")
+    fp.preencher_identificacao(page, tributo="PAGAMENTO INDEVIDO", perdcomp=PERDCOMP, timeout=5_000)
+    desfecho = et.concluir_declaracao(
+        page, permitir_envio=True, pagamento_indevido=True,
+        conferencias_identificacao=fp.conferencias_identificacao(
+            page, tributo="PAGAMENTO INDEVIDO", perdcomp=PERDCOMP))
+    estado = _estado(page)
+    assert desfecho.situacao == SITUACAO_PROTOCOLADA
+    assert estado["passouCi"] == "1" and "litigio" not in estado
+    assert estado["credito"] == "10,00" and estado["grupo"] == "COFINS"
+    assert estado["envios"] == "1"
 
 
 def test_pagamento_realizado(abrir):
