@@ -149,6 +149,8 @@ SITUACAO_SEM_ACESSO_ECAC = "Não foi possível entrar na empresa no e-CAC"
 MOTIVOS_PERFIL_DEFINITIVOS = (
     "situacao nula", "situacao baixada", "situacao inapta", "situacao suspensa",
     "nao existe procuracao", "procuracao expirada", "procuracao eletronica expirada",
+    # "A procuração eletrônica cadastrada para o detentor ... foi cancelada em 05/11/2026"
+    "foi cancelada",
 )
 # Ao abrir o módulo: "Seu perfil não possui permissão ou a execução exige acesso
 # com certificado digital" = a procuração não dá poder para o PER/DCOMP (regra

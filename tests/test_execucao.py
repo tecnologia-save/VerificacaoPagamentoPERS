@@ -407,6 +407,8 @@ def test_empresa_recusada_nao_derruba_as_outras_do_certificado():
     "ATENÇÃO: O CNPJ encontra-se na situação nula.",
     "ATENÇÃO: Não existe procuração eletrônica para o detentor 24.245.826/0001-89 do "
     "certificado digital apresentado.",
+    "ATENÇÃO: A procuração eletrônica cadastrada para o detentor 24.245.826/0001-89 do "
+    "certificado digital apresentado foi cancelada em 05/11/2026 .",
 ])
 def test_perfil_recusado_por_motivo_definitivo_vai_para_a_aa(motivo):
     """Regra do usuário (21/11/2026): empresa em que o e-CAC não deixa entrar ->
