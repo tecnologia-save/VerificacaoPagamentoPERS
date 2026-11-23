@@ -117,6 +117,12 @@ TEXTO_NAO_APTO = "não está apto para envio"
 TEXTO_PAGAMENTO_REALIZADO = "TEVE O PAGAMENTO REALIZADO"
 TEXTO_TRANSMISSAO_NAO_CONCLUIDA = "TRANSMISSÃO NÃO FOI CONCLUÍDA"
 TEXTO_ENVIADA = "Declaração foi enviada com sucesso"
+# "Este documento possui as mesmas características do PER/DCOMP 28581.16014.
+# 231126.1.3.04-5722, transmitido em 23/11/2026 às 14:11:13. Não é permitida a
+# transmissão de documentos em duplicidade" — a Declaração JÁ existe (linha 131
+# da incorporadora, 23/11/2026: a 1ª tentativa recebeu "Não é possível
+# prosseguir", mas a Receita transmitiu). Vale como protocolada, com esse número.
+TEXTO_DUPLICIDADE = "mesmas características do PER/DCOMP"
 from .desfechos import RX_NUMERO_DOCUMENTO  # noqa: E402 — a regex vive em desfechos
 
 ESPERA_APTO_MS = 20_000
@@ -485,6 +491,17 @@ def _desfecho_do_envio(page) -> Desfecho | None:
         print(f"  -> Declaracao enviada. Numero do documento: {numero or '(nao lido)'}")
         return Desfecho(True, f"Declaração enviada — nº {numero or 'não lido'}",
                         situacao=SITUACAO_PROTOCOLADA)
+    duplicada = _primeiro_visivel(_frame(page).get_by_text(TEXTO_DUPLICIDADE, exact=False))
+    if duplicada is not None:
+        texto = _texto_normalizado(duplicada)
+        achado = RX_NUMERO_DOCUMENTO.search(texto)
+        if achado:
+            numero = achado.group(0)
+            print(f"  -> Declaracao ja transmitida antes (duplicidade): {numero}")
+            # Sem o popup do "OK": a próxima linha recarrega o módulo.
+            return Desfecho(True, f"Declaração enviada — nº {numero} (já transmitida; o e-CAC "
+                                  f"recusou a duplicidade: {texto[:300]})",
+                            situacao=SITUACAO_PROTOCOLADA, tela_conhecida=False)
     nao_concluida = _primeiro_visivel(
         _frame(page).get_by_text(TEXTO_TRANSMISSAO_NAO_CONCLUIDA, exact=False))
     if nao_concluida is not None:
@@ -593,7 +610,7 @@ def enviar(page, *, antes_de_enviar=None, diagnostico=None) -> Desfecho:
                                   navegador_morto=navegador_fechou(e)) from e
     print(f"  -> Desfecho do envio: {desfecho.situacao or desfecho.detalhe}")
 
-    if desfecho.situacao == SITUACAO_PROTOCOLADA:
+    if desfecho.situacao == SITUACAO_PROTOCOLADA and desfecho.tela_conhecida:
         # "OK" do popup (volta à tela inicial). O envio já está confirmado: se
         # o OK falhar, a linha continua certa — só a próxima recarrega o módulo.
         try:

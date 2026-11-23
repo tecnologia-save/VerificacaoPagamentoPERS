@@ -153,6 +153,8 @@ const desfecho = () => setTimeout(() => {
   if ('__DESFECHO__' === 'outro') msg('__MSG_OUTRO__');
   if ('__DESFECHO__' === 'recusado') msg('Não é possível prosseguir neste momento. Tente novamente mais tarde. [1795027582597]');
   if ('__DESFECHO__' === 'enviado') mostrar('popup-enviado');
+  // texto real da tela (linha 131 da incorporadora, 23/11/2026)
+  if ('__DESFECHO__' === 'duplicado') msg('Este documento possui as mesmas características do PER/DCOMP 28581.16014.231126.1.3.04-5722, transmitido em 23/11/2026 às 14:11:13. Não é permitida a transmissão de documentos em duplicidade');
 }, 400);
 $('[name=btnEnviar]').addEventListener('click', () => {
   m.envios = String(Number(m.envios) + 1);
@@ -322,6 +324,21 @@ def test_declaracao_enviada_le_o_numero_e_clica_ok(abrir):
     assert NUMERO_ENVIADO in desfecho.detalhe
     assert _estado(page).get("ok") == "1"
     assert desfecho.tela_conhecida
+
+
+def test_duplicidade_e_protocolada_com_o_numero_ja_transmitido(abrir):
+    """Linha 131 da incorporadora (23/11/2026): a 1ª tentativa ouviu "Não é
+    possível prosseguir", mas a Receita transmitiu; a 2ª recebeu o aviso de
+    duplicidade. É a Declaração que já existe: protocolada, com o número dela."""
+    from VerificacaoPagamento.desfechos import numero_documento
+
+    page = abrir(desfecho="duplicado")
+    desfecho = _declaracao(page, permitir_envio=True)
+    assert desfecho.situacao == SITUACAO_PROTOCOLADA and desfecho.ok
+    assert numero_documento(desfecho.detalhe) == "28581.16014.231126.1.3.04-5722"
+    assert _estado(page)["envios"] == "1"
+    assert _estado(page).get("ok") is None   # não há popup de "OK" a clicar
+    assert not desfecho.tela_conhecida        # a próxima linha recarrega o módulo
 
 
 def test_nao_apto_nao_envia(abrir, monkeypatch):
